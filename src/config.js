@@ -1,6 +1,6 @@
 export const API_KEY = import.meta.env.VITE_API_KEY || '';
 export const API_URL = 'https://router.huggingface.co/v1/chat/completions';
-export const MODEL = 'google/gemma-3-27b-it';
+export const MODEL = 'Qwen/Qwen2.5-72B-Instruct';
 
 const INTERACTIVE_RULES = `
 CRITICAL BEHAVIOR — You are a FAST medical assistant with THREE modes.

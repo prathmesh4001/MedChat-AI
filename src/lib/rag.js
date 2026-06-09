@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from './supabase';
+import { apiUploadDocument, apiListDocuments, apiDeleteDocument, apiGetDocumentsContext } from './api-client';
 
 // ─── PDF Text Extraction ─────────────────────────────────
 export async function extractTextFromPDF(file) {
@@ -20,8 +20,6 @@ export async function extractTextFromPDF(file) {
 }
 
 // ─── Image Text Extraction (Gemini Flash Vision) ────────
-// Uses Google Gemini Flash for superior handwriting and medical document OCR.
-// Falls back to HuggingFace if Gemini key is not configured.
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
 const GEMINI_MODEL = 'gemini-2.0-flash';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
@@ -63,18 +61,16 @@ Registration/ID: ...
 (any other text on the document)`;
 
 export async function extractTextFromImage(file) {
-  // Convert file to base64
   const base64Full = await new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
     reader.readAsDataURL(file);
   });
 
-  // Strip the data URI prefix for Gemini API (it needs raw base64)
   const base64Data = base64Full.split(',')[1];
   const mimeType = file.type || 'image/jpeg';
 
-  // ─── Try Gemini Flash first (much better at handwriting) ───
+  // ─── Try Gemini Flash first ───
   if (GEMINI_API_KEY) {
     try {
       const response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
@@ -87,22 +83,16 @@ export async function extractTextFromImage(file) {
               { inline_data: { mime_type: mimeType, data: base64Data } },
             ],
           }],
-          generationConfig: {
-            temperature: 0.1,
-            maxOutputTokens: 4096,
-          },
+          generationConfig: { temperature: 0.1, maxOutputTokens: 4096 },
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
         const extractedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
         if (extractedText && extractedText.trim().length > 50) {
           return `[Extracted from image: ${file.name} — via Gemini Flash]\n\n${extractedText.trim()}`;
         }
-      } else {
-        console.warn('Gemini extraction failed:', response.status, await response.text().catch(() => ''));
       }
     } catch (err) {
       console.warn('Gemini extraction error, falling back to HuggingFace:', err.message);
@@ -112,13 +102,9 @@ export async function extractTextFromImage(file) {
   // ─── Fallback: HuggingFace Vision model ───
   try {
     const { API_KEY, API_URL, MODEL } = await import('../config');
-
     const response = await fetch(API_URL, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${API_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: MODEL,
         messages: [
@@ -126,7 +112,7 @@ export async function extractTextFromImage(file) {
           {
             role: 'user',
             content: [
-              { type: 'text', text: 'Extract all text from this medical document image. Read both printed and handwritten text carefully.' },
+              { type: 'text', text: 'Extract all text from this medical document image.' },
               { type: 'image_url', image_url: { url: base64Full } },
             ],
           },
@@ -140,7 +126,6 @@ export async function extractTextFromImage(file) {
     if (response.ok) {
       const data = await response.json();
       const extractedText = data.choices?.[0]?.message?.content;
-
       if (extractedText && extractedText.trim().length > 50) {
         return `[Extracted from image: ${file.name} — via HuggingFace]\n\n${extractedText.trim()}`;
       }
@@ -153,12 +138,9 @@ export async function extractTextFromImage(file) {
 }
 
 // ─── Upload & Store Document ─────────────────────────────
+// Extracts text from file then saves to MongoDB via backend API
 export async function uploadAndIndexDocument(file, userId) {
-  if (!isSupabaseConfigured() || !userId) {
-    throw new Error('Supabase not configured or user not authenticated');
-  }
-
-  // 1. Extract FULL text (no chunking — preserve complete context)
+  // Extract text based on file type
   let text = '';
   const fileType = file.type;
 
@@ -176,21 +158,8 @@ export async function uploadAndIndexDocument(file, userId) {
     throw new Error('No text could be extracted from the file');
   }
 
-  // 2. Store the FULL document text in a single row
-  const { error: insertError } = await supabase
-    .from('user_documents')
-    .upsert({
-      user_id: userId,
-      file_name: file.name,
-      file_type: fileType,
-      full_text: text,
-      char_count: text.length,
-    }, { onConflict: 'user_id,file_name' });
-
-  if (insertError) {
-    console.error('Insert error:', insertError);
-    throw new Error('Failed to store document: ' + insertError.message);
-  }
+  // Save to backend (MongoDB)
+  await apiUploadDocument(file.name, fileType, text);
 
   return {
     fileName: file.name,
@@ -200,64 +169,38 @@ export async function uploadAndIndexDocument(file, userId) {
   };
 }
 
-// ─── Get All User Documents (full text) ──────────────────
+// ─── Get All User Documents Context (for RAG injection) ──
 export async function getUserDocumentsContext(userId) {
-  if (!isSupabaseConfigured() || !userId) return '';
-
-  const { data, error } = await supabase
-    .from('user_documents')
-    .select('file_name, file_type, full_text, created_at')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-
-  if (error || !data || data.length === 0) return '';
-
-  // Build a complete context string with ALL document contents
-  const parts = data.map((doc, i) => {
-    return `━━━ Document ${i + 1}: "${doc.file_name}" (${doc.file_type}) ━━━\n${doc.full_text}`;
-  });
-
-  return parts.join('\n\n');
+  try {
+    return await apiGetDocumentsContext();
+  } catch (err) {
+    console.error('Failed to get documents context:', err);
+    return '';
+  }
 }
 
-// ─── Format RAG Context (kept for backward compat) ───────
+// ─── Format RAG Context (backward compat) ────────────────
 export function formatRAGContext(results) {
-  // This is now just a passthrough — the context is already formatted
   return typeof results === 'string' ? results : '';
 }
 
 // ─── List User Documents ─────────────────────────────────
 export async function listUserDocuments(userId) {
-  if (!isSupabaseConfigured() || !userId) return [];
-
-  const { data, error } = await supabase
-    .from('user_documents')
-    .select('file_name, file_type, char_count, created_at')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('List documents error:', error);
+  try {
+    return await apiListDocuments();
+  } catch (err) {
+    console.error('List documents error:', err);
     return [];
   }
-
-  return data || [];
 }
 
 // ─── Delete User Document ────────────────────────────────
 export async function deleteUserDocument(fileName, userId) {
-  if (!isSupabaseConfigured() || !userId) return false;
-
-  const { error } = await supabase
-    .from('user_documents')
-    .delete()
-    .eq('user_id', userId)
-    .eq('file_name', fileName);
-
-  if (error) {
-    console.error('Delete document error:', error);
+  try {
+    await apiDeleteDocument(fileName);
+    return true;
+  } catch (err) {
+    console.error('Delete document error:', err);
     return false;
   }
-
-  return true;
 }

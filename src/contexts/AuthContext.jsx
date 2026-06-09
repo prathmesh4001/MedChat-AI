@@ -1,79 +1,52 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { apiSignup, apiLogin, apiMe, clearToken, getToken } from '../lib/api-client';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // On mount, restore session from stored JWT
   useEffect(() => {
-    if (!isSupabaseConfigured()) {
+    const token = getToken();
+    if (!token) {
       setLoading(false);
       return;
     }
-
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-      setLoading(false);
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    apiMe()
+      .then((userData) => setUser(userData))
+      .catch(() => clearToken()) // Token expired / invalid → clear it
+      .finally(() => setLoading(false));
   }, []);
 
+  // ─── Sign Up ───────────────────────────────────────────
   const signUp = async (email, password, fullName = '') => {
-    if (!isSupabaseConfigured()) throw new Error('Supabase not configured');
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: fullName } },
-    });
-    if (error) throw error;
-    return data;
+    const { user: userData } = await apiSignup(email, password, fullName);
+    setUser(userData);
+    return userData;
   };
 
+  // ─── Sign In ───────────────────────────────────────────
   const signIn = async (email, password) => {
-    if (!isSupabaseConfigured()) throw new Error('Supabase not configured');
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    return data;
+    const { user: userData } = await apiLogin(email, password);
+    setUser(userData);
+    return userData;
   };
 
+  // ─── Sign Out ──────────────────────────────────────────
   const signOut = async () => {
-    if (!isSupabaseConfigured()) return;
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    clearToken();
+    setUser(null);
   };
 
-  const resetPassword = async (email) => {
-    if (!isSupabaseConfigured()) throw new Error('Supabase not configured');
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth`,
-    });
-    if (error) throw error;
+  // resetPassword and signInWithGoogle are removed (not supported in JWT auth).
+  // Add your own email-based reset flow here if needed.
+  const resetPassword = async () => {
+    throw new Error('Password reset is not yet available in this version.');
   };
 
-  const signInWithGoogle = async () => {
-    if (!isSupabaseConfigured()) throw new Error('Supabase not configured');
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin },
-    });
-    if (error) throw error;
-    return data;
-  };
-
-  const value = { user, session, loading, signUp, signIn, signOut, resetPassword, signInWithGoogle };
+  const value = { user, loading, signUp, signIn, signOut, resetPassword };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

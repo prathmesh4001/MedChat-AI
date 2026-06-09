@@ -7,7 +7,7 @@ import Toast from '../components/Toast';
 import DocumentUpload from '../components/DocumentUpload';
 import { callAPIStream } from '../lib/api';
 import { exportDiagnosis } from '../lib/export';
-import { createChatSession, saveMessage, isSupabaseConfigured } from '../lib/supabase';
+import { apiCreateSession, apiSaveMessage } from '../lib/api-client';
 import { getUserDocumentsContext, listUserDocuments } from '../lib/rag';
 import { shouldSearchWeb, searchWeb } from '../lib/search';
 import { useAuth } from '../contexts/AuthContext';
@@ -91,19 +91,23 @@ export default function ChatPage({ sectionKey, theme }) {
   }, []);
   useEffect(scrollDown, [messages, loading, streamingText, mcqData, scrollDown]);
 
-  // Save message to Supabase (fire-and-forget)
+  // Save message to MongoDB via backend (fire-and-forget)
   const persistMessage = (role, content, meta = {}) => {
     if (!sessionIdRef.current) return;
-    saveMessage(sessionIdRef.current, role, content, null, meta).catch(() => {});
+    apiSaveMessage(sessionIdRef.current, role, content, null, meta).catch(() => {});
   };
 
   const sendMessage = async (text, isFromMCQ = false) => {
     if (!text.trim() && !image) return;
 
-    // Create Supabase session on first message
-    if (!sessionIdRef.current && isSupabaseConfigured()) {
-      const session = await createChatSession(sectionKey, text.trim().slice(0, 80), user?.id);
-      if (session) sessionIdRef.current = session.id;
+    // Create chat session on first message (requires user to be logged in)
+    if (!sessionIdRef.current && user) {
+      try {
+        const session = await apiCreateSession(sectionKey, text.trim().slice(0, 80));
+        if (session) sessionIdRef.current = session.id;
+      } catch (err) {
+        console.warn('Session creation failed:', err.message);
+      }
     }
 
     const userMsg = { role: 'user', text: text.trim(), image: image?.base64 || null, timestamp: new Date().toISOString(), isMcqAnswer: isFromMCQ };

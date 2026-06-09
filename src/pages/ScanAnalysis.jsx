@@ -3,7 +3,7 @@ import { callAPIStream } from '../lib/api';
 import { exportDiagnosis } from '../lib/export';
 import Message from '../components/Message';
 import Toast from '../components/Toast';
-import { createChatSession, saveMessage, isSupabaseConfigured } from '../lib/supabase';
+import { apiCreateSession, apiSaveMessage } from '../lib/api-client';
 
 const scanConfig = {
   xray: {
@@ -65,7 +65,7 @@ export default function ScanAnalysis({ sectionKey, theme }) {
 
   const persistMsg = (role, content, meta = {}) => {
     if (!sessionIdRef.current) return;
-    saveMessage(sessionIdRef.current, role, content, null, meta).catch(() => {});
+    apiSaveMessage(sessionIdRef.current, role, content, null, meta).catch(() => {});
   };
 
   const scrollDown = useCallback(() => { requestAnimationFrame(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }); }, []);
@@ -82,10 +82,14 @@ export default function ScanAnalysis({ sectionKey, theme }) {
 
   const autoAnalyze = async (base64) => {
     setAnalyzing(true); setLoading(true); setStreamingText('');
-    // Create Supabase session
-    if (!sessionIdRef.current && isSupabaseConfigured()) {
-      const session = await createChatSession(sectionKey, `${cfg.sectionName} Analysis`);
-      if (session) sessionIdRef.current = session.id;
+    // Create session on first analysis
+    if (!sessionIdRef.current) {
+      try {
+        const session = await apiCreateSession(sectionKey, `${cfg.sectionName} Analysis`);
+        if (session) sessionIdRef.current = session.id;
+      } catch (err) {
+        console.warn('Session creation failed:', err.message);
+      }
     }
     setMessages(p => [...p, { role: 'user', text: `Analyze this ${cfg.sectionName} image`, image: base64, timestamp: new Date().toISOString() }]);
     persistMsg('user', `Analyze this ${cfg.sectionName} image`, { type: 'scan_upload' });
