@@ -132,10 +132,4 @@ JWT_EXPIRES_IN=7d
 | GET | `/api/documents` | List documents |
 | DELETE | `/api/documents/:fileName` | Delete document |
 
-## License
 
-MIT License — free to use for educational purposes.
-
----
-
-> ⚠️ This is an AI-assisted tool for educational purposes only. Always consult a licensed healthcare professional for medical advice.
