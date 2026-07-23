@@ -1,5 +1,5 @@
+import React, { useState } from 'react';
 import VoiceButton from './VoiceButton';
-import { useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 
 // Parse differential diagnosis lines: "**Condition** — XX% — explanation"

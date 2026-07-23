@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { callAPIStream } from '../lib/api';
 import { exportDiagnosis } from '../lib/export';
 import Message from '../components/Message';

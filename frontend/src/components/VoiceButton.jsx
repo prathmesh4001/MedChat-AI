@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 export default function VoiceButton({ text, theme }) {
   const [speaking, setSpeaking] = useState(false);
