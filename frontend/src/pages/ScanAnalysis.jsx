@@ -78,7 +78,7 @@ export default function ScanAnalysis({ sectionKey, theme, activeSession, onSessi
     setToast({ show: true, message: 'Report generated!' });
   };
 
-  // Reset page state on tab switch
+  // Reset page state & auto-initialize session on tab switch
   useEffect(() => {
     setImage(null); setMessages([]); setLoading(false); setStreamingText(''); setText(''); setAnalyzing(false); setZoom(1); setContrast(100); sessionIdRef.current = null;
     apiCreateSession(sectionKey, `${cfg.sectionName} Analysis`)
@@ -90,11 +90,11 @@ export default function ScanAnalysis({ sectionKey, theme, activeSession, onSessi
   useEffect(() => {
     const load = async () => {
       if (activeSession && activeSession.section === sectionKey) {
-        sessionIdRef.current = activeSession.id;
+        sessionIdRef.current = activeSession.id || activeSession._id;
         setMessages([]);
         setLoading(true);
         try {
-          const msgs = await apiGetMessages(activeSession.id);
+          const msgs = await apiGetMessages(activeSession.id || activeSession._id);
           const loaded = msgs.map(m => ({
             role: m.role,
             text: m.content,
@@ -102,13 +102,9 @@ export default function ScanAnalysis({ sectionKey, theme, activeSession, onSessi
             timestamp: m.createdAt,
           }));
           setMessages(loaded);
-          
-          // Load the image from the first message containing it
           const firstImgMsg = loaded.find(m => m.role === 'user' && m.image);
           if (firstImgMsg) {
             setImage({ base64: firstImgMsg.image, name: 'Loaded Scan' });
-          } else {
-            setImage(null);
           }
         } catch (err) {
           console.warn('Failed to load scan history:', err);
@@ -121,11 +117,6 @@ export default function ScanAnalysis({ sectionKey, theme, activeSession, onSessi
     load();
   }, [activeSession, sectionKey, onSessionConsumed]);
 
-  const persistMsg = (role, content, imageUrl = null, meta = {}) => {
-    if (!sessionIdRef.current) return;
-    apiSaveMessage(sessionIdRef.current, role, content, imageUrl, meta).catch(() => {});
-  };
-
   const scrollDown = useCallback(() => { requestAnimationFrame(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }); }, []);
   useEffect(scrollDown, [messages, loading, streamingText, scrollDown]);
 
@@ -133,28 +124,43 @@ export default function ScanAnalysis({ sectionKey, theme, activeSession, onSessi
     const file = e.target?.files?.[0] || e;
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => { setImage({ base64: ev.target.result, name: file.name || 'scan.jpg' }); autoAnalyze(ev.target.result); };
+    reader.onload = (ev) => {
+      const base64Data = ev.target.result;
+      setImage({ base64: base64Data, name: file.name || 'scan.jpg' });
+      autoAnalyze(base64Data);
+    };
     reader.readAsDataURL(file);
     if (e.target) e.target.value = '';
   };
 
   const autoAnalyze = async (base64) => {
     setAnalyzing(true); setLoading(true); setStreamingText('');
-    // Create session on first analysis
-    if (!sessionIdRef.current) {
+
+    let currentSessId = sessionIdRef.current;
+    if (!currentSessId) {
       try {
         const session = await apiCreateSession(sectionKey, `${cfg.sectionName} Analysis`);
-        if (session) sessionIdRef.current = session.id || session._id;
+        if (session) {
+          currentSessId = session.id || session._id;
+          sessionIdRef.current = currentSessId;
+        }
       } catch (err) {
         console.warn('Session creation failed:', err.message);
       }
     }
+
     setMessages(p => [...p, { role: 'user', text: `Analyze this ${cfg.sectionName} image`, image: base64, timestamp: new Date().toISOString() }]);
-    persistMsg('user', `Analyze this ${cfg.sectionName} image`, base64, { type: 'scan_upload' });
+    
+    if (currentSessId) {
+      apiSaveMessage(currentSessId, 'user', `Analyze this ${cfg.sectionName} image`, base64, { type: 'scan_upload' }).catch(() => {});
+    }
+
     try {
       const reply = await callAPIStream(cfg.prompt, { base64 }, sectionKey, [], (partial) => { setStreamingText(partial); scrollDown(); });
       setMessages(p => [...p, { role: 'assistant', text: reply, timestamp: new Date().toISOString() }]);
-      persistMsg('assistant', reply, null, { type: 'scan_analysis' });
+      if (currentSessId) {
+        apiSaveMessage(currentSessId, 'assistant', reply, null, { type: 'scan_analysis' }).catch(() => {});
+      }
       setStreamingText('');
     } catch (err) {
       setMessages(p => [...p, { role: 'assistant', text: `**Error**: ${err.message}`, timestamp: new Date().toISOString() }]);
@@ -164,21 +170,33 @@ export default function ScanAnalysis({ sectionKey, theme, activeSession, onSessi
 
   const sendMessage = async () => {
     if (!text.trim() || loading) return;
-    if (!sessionIdRef.current) {
+
+    let currentSessId = sessionIdRef.current;
+    if (!currentSessId) {
       try {
         const session = await apiCreateSession(sectionKey, `${cfg.sectionName} Analysis`);
-        if (session) sessionIdRef.current = session.id || session._id;
+        if (session) {
+          currentSessId = session.id || session._id;
+          sessionIdRef.current = currentSessId;
+        }
       } catch (err) {
         console.warn('Session creation failed:', err.message);
       }
     }
-    setMessages(p => [...p, { role: 'user', text: text.trim(), timestamp: new Date().toISOString() }]);
+
     const q = text.trim(); setText(''); setLoading(true); setStreamingText('');
-    persistMsg('user', q, null);
+    setMessages(p => [...p, { role: 'user', text: q, timestamp: new Date().toISOString() }]);
+    
+    if (currentSessId) {
+      apiSaveMessage(currentSessId, 'user', q, null).catch(() => {});
+    }
+
     try {
       const reply = await callAPIStream(q, image ? { base64: image.base64 } : null, sectionKey, messages, (partial) => { setStreamingText(partial); scrollDown(); });
       setMessages(p => [...p, { role: 'assistant', text: reply, timestamp: new Date().toISOString() }]);
-      persistMsg('assistant', reply, null);
+      if (currentSessId) {
+        apiSaveMessage(currentSessId, 'assistant', reply, null).catch(() => {});
+      }
       setStreamingText('');
     } catch (err) {
       setMessages(p => [...p, { role: 'assistant', text: `**Error**: ${err.message}`, timestamp: new Date().toISOString() }]);
@@ -206,13 +224,21 @@ export default function ScanAnalysis({ sectionKey, theme, activeSession, onSessi
 
   return (
     <div className="flex-1 flex min-h-0 overflow-hidden">
+      {/* Hidden file input */}
+      <input ref={fileRef} type="file" accept="image/*" hidden onChange={handleFile} />
+
       {/* ═══ LEFT: DICOM Viewer ═══ */}
       <div className="w-[55%] flex flex-col min-h-0 max-lg:hidden" style={{ background: dark ? '#060e20' : '#0f172a' }}>
         {/* Toolbar */}
         <div className="flex items-center justify-between px-4 py-2" style={{ background: 'rgba(0,0,0,0.3)' }}>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-md" style={{ background: 'rgba(122,215,198,0.15)', color: '#7ad7c6' }}>{cfg.modality}</span>
             <span className="text-[10px] font-mono" style={{ color: 'rgba(255,255,255,0.4)' }}>{studyId}</span>
+            <button onClick={() => fileRef.current?.click()} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold text-white transition-all hover:scale-105"
+              style={{ background: 'linear-gradient(135deg, #7ad7c6, #006156)' }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Upload {cfg.sectionName}
+            </button>
           </div>
           <div className="flex items-center gap-1">
             <ToolBtn onClick={() => setZoom(z => Math.min(z + 0.25, 3))} title="Zoom In">
@@ -275,7 +301,6 @@ export default function ScanAnalysis({ sectionKey, theme, activeSession, onSessi
               </button>
             )}
           </div>
-          <input ref={fileRef} type="file" accept="image/*" hidden onChange={handleFile} />
 
           {/* Findings Panel */}
           {image && (
@@ -298,8 +323,8 @@ export default function ScanAnalysis({ sectionKey, theme, activeSession, onSessi
                       }
                     </div>
                     <div>
-                      <p className="text-[11px] font-bold text-white/80">{f.label}</p>
-                      <p className="text-[10px] text-white/40 leading-relaxed">{f.detail}</p>
+                      <p className="text-[11px] font-bold text-white/90">{f.label}</p>
+                      <p className="text-[10px] text-white/40 leading-tight mt-0.5">{f.detail}</p>
                     </div>
                   </div>
                 ))}
@@ -309,101 +334,118 @@ export default function ScanAnalysis({ sectionKey, theme, activeSession, onSessi
         </div>
       </div>
 
-      {/* ═══ RIGHT: Chat Panel ═══ */}
-      <div className="flex-1 flex flex-col min-h-0 min-w-0">
-        {/* Chat Header */}
-        <div className="px-5 py-3 flex items-center justify-between" style={{ background: dark ? '#131b2e' : '#ffffff' }}>
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold" style={{ background: 'linear-gradient(135deg, #7ad7c6, #006156)' }}>AI</div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold font-display" style={{ color: 'var(--on-surface)' }}>{cfg.title}</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              </div>
-              <p className="text-[10px]" style={{ color: 'var(--outline)' }}>Study: {studyId}</p>
+      {/* ═══ RIGHT: Diagnostic Chat ═══ */}
+      <div className="flex-1 flex flex-col min-h-0" style={{ background: dark ? '#0b1326' : '#f8fafc' }}>
+        {/* Header */}
+        <div className="px-5 py-3.5 border-b flex items-center justify-between"
+          style={{ borderColor: dark ? 'rgba(255,255,255,0.06)' : '#e2e8f0', background: dark ? '#0d172e' : '#ffffff' }}>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-bold font-display" style={{ color: 'var(--on-surface)' }}>{cfg.title}</h2>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             </div>
+            <p className="text-[11px]" style={{ color: 'var(--outline)' }}>Study: {studyId}</p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => fileRef.current?.click()} className="lg:hidden px-3 py-1.5 rounded-xl text-xs font-bold" style={{ background: dark ? 'rgba(122,215,198,0.08)' : 'rgba(0,121,107,0.06)', color: 'var(--primary)' }}>Upload</button>
-            {messages.length > 0 && (
-              <>
-                <button onClick={handleExport} className="px-3 py-1.5 rounded-xl text-white text-[11px] font-bold transition-all hover:-translate-y-0.5 flex items-center gap-1.5" style={{ background: 'linear-gradient(135deg, #7ad7c6, #006156)' }}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  Export
-                </button>
-                <button onClick={clearChat} className="px-3 py-1.5 rounded-xl text-[11px] font-semibold hover:opacity-70" style={{ color: 'var(--outline)' }}>Clear</button>
-              </>
-            )}
+            <button onClick={() => fileRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white transition-all hover:scale-105"
+              style={{ background: 'linear-gradient(135deg, #7ad7c6, #006156)' }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Upload Image
+            </button>
+            <button onClick={handleExport} className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all hover:opacity-80"
+              style={{ background: dark ? 'rgba(255,255,255,0.06)' : '#e2e8f0', color: 'var(--on-surface)' }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5 inline mr-1"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export
+            </button>
+            <button onClick={clearChat} className="px-3 py-1.5 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors">Clear</button>
           </div>
         </div>
 
-        {/* Chat Messages */}
-        <div ref={chatRef} className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth" style={{ background: 'var(--bg)' }}>
-          {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full text-center px-4">
-              <div className="w-16 h-16 rounded-3xl flex items-center justify-center mb-4" style={{ background: dark ? 'rgba(122,215,198,0.06)' : 'rgba(0,121,107,0.06)', color: 'var(--primary)' }}>{cfg.icon}</div>
-              <p className="text-sm font-bold mb-1 font-display" style={{ color: 'var(--on-surface)' }}>{cfg.title}</p>
-              <p className="text-xs max-w-xs" style={{ color: 'var(--outline)' }}>Upload a {cfg.sectionName} image to start AI-powered analysis.</p>
+        {/* Messages Scroll Area */}
+        <div ref={chatRef} className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+          {messages.length === 0 && !loading && (
+            <div className="h-full flex flex-col items-center justify-center text-center p-6 my-auto">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
+                style={{ background: 'rgba(122,215,198,0.08)', color: '#7ad7c6' }}>{cfg.icon}</div>
+              <h3 className="text-sm font-bold mb-1 font-display" style={{ color: 'var(--on-surface)' }}>{cfg.title}</h3>
+              <p className="text-xs max-w-sm" style={{ color: 'var(--outline)' }}>
+                Upload an image or ask a diagnostic question to begin your automated clinical report.
+              </p>
+              <button onClick={() => fileRef.current?.click()} className="mt-4 px-4 py-2 rounded-xl text-xs font-bold text-white transition-all hover:scale-105"
+                style={{ background: 'linear-gradient(135deg, #7ad7c6, #006156)' }}>
+                Upload {cfg.sectionName} Image
+              </button>
             </div>
           )}
-          {messages.map((msg, i) => <Message key={i} msg={msg} theme={theme} onCopy={() => setToast({ show: true, message: 'Copied!' })} />)}
-          {loading && streamingText && <Message msg={{ role: 'assistant', text: streamingText }} theme={theme} onCopy={() => {}} />}
+
+          {messages.map((m, i) => (
+            <Message key={i} message={m} theme={theme} section={sectionKey} />
+          ))}
+
+          {loading && streamingText && (
+            <Message message={{ role: 'assistant', text: streamingText }} theme={theme} section={sectionKey} />
+          )}
+
           {loading && !streamingText && (
-            <div className="flex gap-3"><div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: 'linear-gradient(135deg, #7ad7c6, #006156)' }}>AI</div>
-              <div className="px-5 py-4 rounded-2xl flex items-center gap-2" style={{ background: 'var(--surface-container)' }}>
-                {[0,.15,.3].map((d,i) => <div key={i} className="w-2 h-2 rounded-full animate-bounce" style={{ background: 'var(--primary)', animationDelay: `${d}s` }}/>)}
+            <div className="flex items-center gap-3 p-4 rounded-2xl animate-pulse"
+              style={{ background: dark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)' }}>
+              <div className="w-8 h-8 rounded-full bg-[#7ad7c6]/20 animate-spin flex items-center justify-center">
+                <div className="w-3 h-3 rounded-full bg-[#7ad7c6]" />
               </div>
+              <span className="text-xs text-slate-400 font-medium">Analyzing scan data...</span>
             </div>
           )}
         </div>
 
-        {/* Quick Actions */}
-        {messages.length > 0 && (
-          <div className="px-4 py-2 flex flex-wrap gap-2" style={{ borderTop: `1px solid ${dark ? 'rgba(63,73,73,0.15)' : 'rgba(203,213,225,0.3)'}` }}>
-            <button onClick={handleExport} className="action-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Report</button>
-            <button onClick={clearChat} className="action-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> New Scan</button>
-          </div>
-        )}
-
-        {/* Input */}
-        <div className="px-4 pb-3 pt-2" style={{ background: dark ? '#131b2e' : '#ffffff' }}>
-          <div className="flex items-center gap-2 px-3 py-2 rounded-2xl" style={{ background: dark ? 'var(--surface-highest)' : 'var(--surface-container)', boxShadow: `inset 0 0 0 1px ${dark ? 'rgba(63,73,73,0.2)' : 'rgba(203,213,225,0.4)'}` }}>
-            <input value={text} onChange={e => setText(e.target.value)} onKeyDown={handleKey} placeholder="Ask about the scan..." className="flex-1 bg-transparent text-sm outline-none" style={{ color: 'var(--on-surface)' }} />
-            <button onClick={sendMessage} disabled={!text.trim() || loading} className={`w-8 h-8 rounded-xl flex items-center justify-center text-white transition-all ${text.trim() && !loading ? 'hover:scale-105' : 'opacity-25 cursor-not-allowed'}`}
-              style={{ background: text.trim() && !loading ? 'linear-gradient(135deg, #7ad7c6, #006156)' : 'var(--outline)' }}>
-              <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        {/* Input Bar */}
+        <div className="p-3 border-t" style={{ borderColor: dark ? 'rgba(255,255,255,0.06)' : '#e2e8f0', background: dark ? '#0d172e' : '#ffffff' }}>
+          <div className="flex items-center gap-2">
+            <input type="text" value={text} onChange={e => setText(e.target.value)} onKeyDown={handleKey}
+              placeholder="Ask about the scan..."
+              className="flex-1 px-4 py-2.5 rounded-xl text-xs bg-transparent border outline-none transition-all"
+              style={{
+                borderColor: dark ? 'rgba(255,255,255,0.1)' : '#cbd5e1',
+                color: 'var(--on-surface)',
+                background: dark ? 'rgba(0,0,0,0.2)' : '#f8fafc',
+              }} />
+            <button onClick={sendMessage} disabled={!text.trim() || loading}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold text-white transition-all ${text.trim() && !loading ? 'hover:scale-105' : 'opacity-40 cursor-not-allowed'}`}
+              style={{ background: 'linear-gradient(135deg, #7ad7c6, #006156)' }}>
+              Send
             </button>
           </div>
         </div>
       </div>
-      {/* ═══ EXPORT PATIENT DETAILS MODAL ═══ */}
+
+      <Toast message={toast.message} show={toast.show} onClose={() => setToast({ show: false, message: '' })} theme={theme} />
+
+      {/* Export Modal */}
       {showExportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className={`w-full max-w-md p-6 rounded-3xl shadow-2xl transition-all duration-300 transform scale-100 ${dark ? 'bg-[#0f172a] border border-white/10 text-white' : 'bg-white border border-slate-200 text-slate-800'}`}>
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-base font-bold font-display flex items-center gap-2">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="w-5 h-5 text-[#7ad7c6]"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                Export Diagnostic Report
-              </h3>
-              <button onClick={() => setShowExportModal(false)} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-            </div>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl p-6 shadow-2xl animate-fadeIn"
+            style={{ background: dark ? '#0d172e' : '#ffffff', border: `1px solid ${dark ? 'rgba(255,255,255,0.1)' : '#e2e8f0'}` }}>
+            <h3 className="text-base font-bold mb-1 font-display" style={{ color: 'var(--on-surface)' }}>Export Diagnostic Report</h3>
+            <p className="text-xs text-slate-400 mb-4">Enter patient details to include in the generated PDF report.</p>
             
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-60">Patient Name</label>
-                <input type="text" value={patientName} onChange={e => setPatientName(e.target.value)} placeholder="e.g. John Doe" className={`w-full px-4 py-2.5 rounded-xl text-sm outline-none transition-all ${dark ? 'bg-white/5 focus:bg-white/10 border border-white/10 text-white focus:border-[#7ad7c6]' : 'bg-slate-50 focus:bg-slate-100 border border-slate-200 focus:border-[#00796b]'}`} />
+                <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Patient Full Name</label>
+                <input type="text" value={patientName} onChange={e => setPatientName(e.target.value)} placeholder="e.g. John Doe"
+                  className="w-full px-3 py-2 rounded-xl text-xs border outline-none"
+                  style={{ background: dark ? 'rgba(0,0,0,0.2)' : '#f8fafc', borderColor: dark ? 'rgba(255,255,255,0.1)' : '#cbd5e1', color: 'var(--on-surface)' }} />
               </div>
-              
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-60">Age (Years)</label>
-                  <input type="number" value={patientAge} onChange={e => setPatientAge(e.target.value)} placeholder="e.g. 45" className={`w-full px-4 py-2.5 rounded-xl text-sm outline-none transition-all ${dark ? 'bg-white/5 focus:bg-white/10 border border-white/10 text-white focus:border-[#7ad7c6]' : 'bg-slate-50 focus:bg-slate-100 border border-slate-200 focus:border-[#00796b]'}`} />
+                  <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Age</label>
+                  <input type="number" value={patientAge} onChange={e => setPatientAge(e.target.value)} placeholder="e.g. 45"
+                    className="w-full px-3 py-2 rounded-xl text-xs border outline-none"
+                    style={{ background: dark ? 'rgba(0,0,0,0.2)' : '#f8fafc', borderColor: dark ? 'rgba(255,255,255,0.1)' : '#cbd5e1', color: 'var(--on-surface)' }} />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-60">Gender</label>
-                  <select value={patientGender} onChange={e => setPatientGender(e.target.value)} className={`w-full px-4 py-2.5 rounded-xl text-sm outline-none transition-all ${dark ? 'bg-[#1e293b] border border-white/10 text-white focus:border-[#7ad7c6]' : 'bg-slate-50 border border-slate-200 focus:border-[#00796b]'}`}>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Gender</label>
+                  <select value={patientGender} onChange={e => setPatientGender(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl text-xs border outline-none"
+                    style={{ background: dark ? '#0d172e' : '#f8fafc', borderColor: dark ? 'rgba(255,255,255,0.1)' : '#cbd5e1', color: 'var(--on-surface)' }}>
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
                     <option value="Other">Other</option>
@@ -412,14 +454,14 @@ export default function ScanAnalysis({ sectionKey, theme, activeSession, onSessi
               </div>
             </div>
 
-            <div className="flex items-center gap-3 mt-6">
-              <button onClick={() => setShowExportModal(false)} className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${dark ? 'bg-white/5 hover:bg-white/10' : 'bg-slate-100 hover:bg-slate-200'}`}>Cancel</button>
-              <button onClick={confirmExport} className="flex-1 py-2.5 rounded-xl text-white text-xs font-bold transition-all hover:scale-[1.02]" style={{ background: 'linear-gradient(135deg, #7ad7c6, #006156)' }}>Generate Report</button>
+            <div className="flex items-center justify-end gap-2 mt-6">
+              <button onClick={() => setShowExportModal(false)} className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200">Cancel</button>
+              <button onClick={confirmExport} className="px-4 py-2 rounded-xl text-xs font-bold text-white shadow-lg transition-all hover:scale-105"
+                style={{ background: 'linear-gradient(135deg, #7ad7c6, #006156)' }}>Download PDF</button>
             </div>
           </div>
         </div>
       )}
-      <Toast message={toast.message} show={toast.show} onClose={() => setToast({ show: false, message: '' })} theme={theme} />
     </div>
   );
 }

@@ -154,11 +154,14 @@ export default function ChatPage({ sectionKey, theme, activeSession, onSessionCo
   const sendMessage = async (text, isFromMCQ = false) => {
     if (!text.trim() && !image) return;
 
-    // Create chat session on first message (requires user to be logged in)
-    if (!sessionIdRef.current && user) {
+    let currentSessId = sessionIdRef.current;
+    if (!currentSessId && user) {
       try {
         const session = await apiCreateSession(sectionKey, text.trim().slice(0, 80));
-        if (session) sessionIdRef.current = session.id || session._id;
+        if (session) {
+          currentSessId = session.id || session._id;
+          sessionIdRef.current = currentSessId;
+        }
       } catch (err) {
         console.warn('Session creation failed:', err.message);
       }
@@ -172,8 +175,10 @@ export default function ChatPage({ sectionKey, theme, activeSession, onSessionCo
     let searchedWith = [];
     let webImages = [];
 
-    // Persist user message
-    persistMessage('user', text.trim(), { isMcqAnswer: isFromMCQ });
+    // Persist user message immediately with currentSessId
+    if (currentSessId) {
+      apiSaveMessage(currentSessId, 'user', text.trim(), img?.base64 || null, { isMcqAnswer: isFromMCQ }).catch(() => {});
+    }
 
     try {
       // Fetch full document context (direct injection — no chunking/embedding)
