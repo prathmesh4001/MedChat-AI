@@ -39,6 +39,9 @@ function handleLocalFallback(path, options) {
   }
 
   if (path === '/api/auth/reset-password') {
+    if (body.newPassword) {
+      return { message: 'Password updated successfully! Please sign in with your new password.' };
+    }
     return { message: 'Password reset link sent to your email.' };
   }
 
@@ -144,10 +147,10 @@ export async function apiMe() {
   return apiFetch('/api/auth/me');
 }
 
-export async function apiResetPassword(email) {
+export async function apiResetPassword(email, newPassword = '') {
   return apiFetch('/api/auth/reset-password', {
     method: 'POST',
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ email, newPassword }),
   });
 }
 

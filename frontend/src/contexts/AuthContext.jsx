@@ -41,8 +41,8 @@ export function AuthProvider({ children }) {
   };
 
   // ─── Reset Password ────────────────────────────────────
-  const resetPassword = async (email) => {
-    return apiResetPassword(email);
+  const resetPassword = async (email, newPassword = '') => {
+    return apiResetPassword(email, newPassword);
   };
 
   const value = { user, loading, signUp, signIn, signOut, resetPassword };

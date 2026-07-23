@@ -169,7 +169,7 @@ export default function AuthPage({ theme }) {
       if (!value.trim()) return 'Email is required';
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) return 'Enter a valid email address';
     }
-    if (name === 'password' && currentTab !== 'reset') {
+    if (name === 'password') {
       if (!value) return 'Password is required';
       if (value.length < 8) return 'Password must be at least 8 characters';
     }
@@ -213,16 +213,15 @@ export default function AuthPage({ theme }) {
     const errors = {};
     const newTouched = {};
 
-    if (tab === 'signup') {
-      errors.fullName = validateField('fullName', fullName);
-      newTouched.fullName = true;
-    }
     errors.email = validateField('email', email);
     newTouched.email = true;
 
-    if (tab !== 'reset') {
-      errors.password = validateField('password', password);
-      newTouched.password = true;
+    errors.password = validateField('password', password);
+    newTouched.password = true;
+
+    if (tab === 'signup') {
+      errors.fullName = validateField('fullName', fullName);
+      newTouched.fullName = true;
     }
 
     setTouched(newTouched);
@@ -243,8 +242,8 @@ export default function AuthPage({ theme }) {
         setSuccess(t('account_created'));
         switchTab('signin');
       } else if (tab === 'reset') {
-        await resetPassword(email);
-        setSuccess(t('reset_sent'));
+        const data = await resetPassword(email, password);
+        setSuccess(data?.message || 'Password updated successfully!');
         switchTab('signin');
       }
     } catch (err) {
@@ -553,43 +552,41 @@ export default function AuthPage({ theme }) {
             </div>
 
             {/* Password Input */}
-            {tab !== 'reset' && (
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-widest mb-2 font-display text-slate-600">
-                  {t('password')}
-                </label>
-                <InputGroup hasError={touched.password && Boolean(fieldErrors.password)} icon={
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[18px] h-[18px]">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                  </svg>
-                }>
-                  <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => handleChange('password', e.target.value)} onBlur={() => handleBlur('password')}
-                    placeholder="Enter your password" autoComplete="new-password" style={{ ...inputStyle, color: '#0f172a' }} />
-                  
-                  <button type="button" onClick={() => setShowPassword(!showPassword)}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:opacity-60 shrink-0 cursor-pointer text-slate-400">
-                    {showPassword ? (
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[18px] h-[18px]">
-                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                        <line x1="1" y1="1" x2="23" y2="23" />
-                      </svg>
-                    ) : (
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[18px] h-[18px]">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
-                      </svg>
-                    )}
-                  </button>
-                </InputGroup>
-                {touched.password && fieldErrors.password && (
-                  <p className="text-[11px] font-semibold text-red-500 mt-1 pl-1 flex items-center gap-1 animate-fadeIn">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 shrink-0">
-                      <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-widest mb-2 font-display text-slate-600">
+                {tab === 'reset' ? 'NEW PASSWORD' : t('password')}
+              </label>
+              <InputGroup hasError={touched.password && Boolean(fieldErrors.password)} icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[18px] h-[18px]">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              }>
+                <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => handleChange('password', e.target.value)} onBlur={() => handleBlur('password')}
+                  placeholder={tab === 'reset' ? 'Enter new password' : 'Enter your password'} autoComplete="new-password" style={{ ...inputStyle, color: '#0f172a' }} />
+                
+                <button type="button" onClick={() => setShowPassword(!showPassword)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:opacity-60 shrink-0 cursor-pointer text-slate-400">
+                  {showPassword ? (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[18px] h-[18px]">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                      <line x1="1" y1="1" x2="23" y2="23" />
                     </svg>
-                    {fieldErrors.password}
-                  </p>
-                )}
-              </div>
-            )}
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-[18px] h-[18px]">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )}
+                </button>
+              </InputGroup>
+              {touched.password && fieldErrors.password && (
+                <p className="text-[11px] font-semibold text-red-500 mt-1 pl-1 flex items-center gap-1 animate-fadeIn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3 shrink-0">
+                    <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                  {fieldErrors.password}
+                </p>
+              )}
+            </div>
 
             {/* Remember Me and Forgot Password Container */}
             {tab === 'signin' && (

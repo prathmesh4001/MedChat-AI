@@ -92,7 +92,7 @@ router.get('/me', auth, async (req, res) => {
 // ─── POST /api/auth/reset-password ────────────────────────
 router.post('/reset-password', async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, newPassword } = req.body;
     if (!email) {
       return res.status(400).json({ error: 'Email address is required' });
     }
@@ -100,6 +100,15 @@ router.post('/reset-password', async (req, res) => {
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
       return res.status(404).json({ error: 'No account found with this email address' });
+    }
+
+    if (newPassword) {
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters' });
+      }
+      user.passwordHash = newPassword; // pre-save hook will bcrypt hash it automatically
+      await user.save();
+      return res.json({ message: 'Password updated successfully! Please sign in with your new password.' });
     }
 
     res.json({ message: 'Password reset link sent to your email' });
