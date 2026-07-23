@@ -70,7 +70,10 @@ router.get('/', async (req, res) => {
 router.get('/summary', async (req, res) => {
   try {
     const UserDocument = require('../models/UserDocument');
-    const userId = new mongoose.Types.ObjectId(req.user.id);
+    let userId = req.user.id;
+    if (mongoose.Types.ObjectId.isValid(userId)) {
+      userId = new mongoose.Types.ObjectId(userId);
+    }
 
     // ── 1. Enrich sessions with message data ──────────────
     const sessions = await ChatSession.aggregate([

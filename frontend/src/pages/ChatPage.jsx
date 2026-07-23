@@ -166,7 +166,7 @@ export default function ChatPage({ sectionKey, theme, activeSession, onSessionCo
     if (!text.trim() && !image) return;
 
     let currentSessId = sessionIdRef.current;
-    if (!currentSessId && user) {
+    if (!currentSessId) {
       try {
         const session = await apiCreateSession(sectionKey, text.trim().slice(0, 80));
         if (session) {
