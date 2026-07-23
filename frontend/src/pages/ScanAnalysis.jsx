@@ -79,7 +79,12 @@ export default function ScanAnalysis({ sectionKey, theme, activeSession, onSessi
   };
 
   // Reset page state on tab switch
-  useEffect(() => { setImage(null); setMessages([]); setLoading(false); setStreamingText(''); setText(''); setAnalyzing(false); setZoom(1); setContrast(100); sessionIdRef.current = null; }, [sectionKey]);
+  useEffect(() => {
+    setImage(null); setMessages([]); setLoading(false); setStreamingText(''); setText(''); setAnalyzing(false); setZoom(1); setContrast(100); sessionIdRef.current = null;
+    apiCreateSession(sectionKey, `${cfg.sectionName} Analysis`)
+      .then(session => { if (session) sessionIdRef.current = session.id || session._id; })
+      .catch(() => {});
+  }, [sectionKey]);
 
   // Load session history when activeSession is passed
   useEffect(() => {
@@ -159,6 +164,14 @@ export default function ScanAnalysis({ sectionKey, theme, activeSession, onSessi
 
   const sendMessage = async () => {
     if (!text.trim() || loading) return;
+    if (!sessionIdRef.current) {
+      try {
+        const session = await apiCreateSession(sectionKey, `${cfg.sectionName} Analysis`);
+        if (session) sessionIdRef.current = session.id || session._id;
+      } catch (err) {
+        console.warn('Session creation failed:', err.message);
+      }
+    }
     setMessages(p => [...p, { role: 'user', text: text.trim(), timestamp: new Date().toISOString() }]);
     const q = text.trim(); setText(''); setLoading(true); setStreamingText('');
     persistMsg('user', q, null);
