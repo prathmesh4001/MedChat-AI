@@ -101,8 +101,19 @@ export default function ChatPage({ sectionKey, theme, activeSession, onSessionCo
   const { user } = useAuth();
   const { t, langMeta } = useLanguage();
 
-  // Reset session when section changes
-  useEffect(() => { sessionIdRef.current = null; setMessages([]); setMcqData(null); setMcqRetryInfo(null); }, [sectionKey]);
+  // Reset session when section changes or when new consultation is triggered
+  useEffect(() => {
+    const handleNew = () => {
+      sessionIdRef.current = null;
+      setMessages([]);
+      setMcqData(null);
+      setMcqRetryInfo(null);
+      setImage(null);
+    };
+    handleNew();
+    window.addEventListener('medchat-new-consultation', handleNew);
+    return () => window.removeEventListener('medchat-new-consultation', handleNew);
+  }, [sectionKey]);
 
   // Load messages when a session is selected from sidebar
   useEffect(() => {

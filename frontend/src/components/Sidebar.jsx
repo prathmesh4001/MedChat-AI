@@ -192,7 +192,10 @@ export default function Sidebar({ open, onClose, theme, toggleTheme }) {
           to="/general"
           className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold transition-all duration-300 text-white hover:-translate-y-0.5 mt-1"
           style={{ background: 'linear-gradient(135deg, #7ad7c6, #006156)', boxShadow: '0 4px 20px rgba(122,215,198,0.15)' }}
-          onClick={onClose}
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent('medchat-new-consultation'));
+            if (onClose) onClose();
+          }}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
           {t('start_consultation')}
