@@ -33,8 +33,10 @@ const FILTER_TABS = [
 const GROUP_ORDER = ['Today', 'Yesterday', 'This Week', 'Older'];
 
 function getDateGroup(dateStr) {
+  if (!dateStr) return 'Today';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return 'Today';
   const now       = new Date();
-  const date      = new Date(dateStr);
   const today     = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterday = new Date(today.getTime() - 86_400_000);
   const weekAgo   = new Date(today.getTime() - 6 * 86_400_000);

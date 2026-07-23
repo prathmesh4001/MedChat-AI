@@ -25,7 +25,37 @@ function saveRegisteredUsers(users) {
 }
 
 function getLocalSessions() {
-  try { return JSON.parse(localStorage.getItem('medchat-sessions-db') || '[]'); } catch { return []; }
+  try {
+    const stored = localStorage.getItem('medchat-sessions-db');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+    const initial = [
+      {
+        _id: 'sess_default_1',
+        id: 'sess_default_1',
+        section: 'xray',
+        title: 'X-Ray Chest & Lung Field Analysis',
+        messageCount: 2,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      {
+        _id: 'sess_default_2',
+        id: 'sess_default_2',
+        section: 'general',
+        title: 'General Symptom & Vital Health Checkup',
+        messageCount: 4,
+        createdAt: new Date(Date.now() - 3600000).toISOString(),
+        updatedAt: new Date(Date.now() - 3600000).toISOString(),
+      }
+    ];
+    localStorage.setItem('medchat-sessions-db', JSON.stringify(initial));
+    return initial;
+  } catch {
+    return [];
+  }
 }
 function saveLocalSessions(sessions) {
   localStorage.setItem('medchat-sessions-db', JSON.stringify(sessions));
