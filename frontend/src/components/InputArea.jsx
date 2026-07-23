@@ -23,9 +23,16 @@ export default function InputArea({ theme, section, image, setImage, onSend, loa
   const handleSend = () => { if (!canSend) return; onSend(text); setText(''); };
   const handleKey = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } };
 
+  const isImageFile = (file) => {
+    if (!file) return false;
+    const type = file.type || '';
+    const name = file.name || '';
+    return type.startsWith('image/') || name.match(/\.(png|jpe?g|webp|dcm|dicom|bmp|tiff?)$/i);
+  };
+
   const handleFile = (e) => {
     const file = e.target.files[0];
-    if (!file || !file.type.startsWith('image/')) return;
+    if (!isImageFile(file)) return;
     const reader = new FileReader();
     reader.onload = (ev) => setImage({ base64: ev.target.result, name: file.name });
     reader.readAsDataURL(file);
@@ -35,7 +42,7 @@ export default function InputArea({ theme, section, image, setImage, onSend, loa
   const handleDrop = (e) => {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) {
+    if (isImageFile(file)) {
       const reader = new FileReader();
       reader.onload = (ev) => setImage({ base64: ev.target.result, name: file.name });
       reader.readAsDataURL(file);

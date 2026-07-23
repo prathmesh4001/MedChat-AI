@@ -19,13 +19,14 @@ export default function DocumentUpload({ theme, onClose }) {
   }, [user]);
 
   const loadDocuments = async () => {
-    if (!user) return;
-    const docs = await listUserDocuments(user.id);
+    const userId = user?.id || 'demo-user';
+    const docs = await listUserDocuments(userId);
     setDocuments(docs);
   };
 
   const handleUpload = async (files) => {
-    if (!user || !files.length) return;
+    if (!files || !files.length) return;
+    const userId = user?.id || 'demo-user';
     setError('');
     setUploading(true);
 

@@ -144,6 +144,7 @@ function handleLocalFallback(path, options) {
         section: s.section,
         title: s.title,
         messageCount: sessMsgs.length || s.messageCount || 1,
+        createdAt: s.createdAt || s.updatedAt || new Date().toISOString(),
         updatedAt: s.updatedAt || new Date().toISOString(),
         firstUserMsg,
       };
