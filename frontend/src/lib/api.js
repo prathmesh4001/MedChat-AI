@@ -226,20 +226,26 @@ export async function callAPIStream(text, image, section, prevHistory = [], onCh
       opts1 = ["Dry cough / Tickle", "Productive cough (with phlegm)", "Sore throat / Pain swallowing", "Hoarseness / Wheezing"];
     }
 
-    // Step 1: Initial MCQ Question tailored to exact symptom!
+    // Step 1: Initial MCQ Question — fires when no prior user messages exist
+    // NOTE: prevHistory already includes the current user message, so
+    // userMsgCount === 1 means this IS the first message sent.
     if (userMsgCount <= 1) {
-      const mcq1 = JSON.stringify({
-        thinking: `Evaluating ${symptomName} location and clinical pattern`,
-        question: q1,
-        options: opts1,
-        step: 1,
-        totalSteps: 3
-      });
-      onChunk(mcq1);
-      return mcq1;
+      // Only show Q1 if the current message is a symptom (not an MCQ answer)
+      const isMcqAnswer = prevHistory.some(m => m.role === 'assistant' && m.isMcq);
+      if (!isMcqAnswer) {
+        const mcq1 = JSON.stringify({
+          thinking: `Evaluating ${symptomName} location and clinical pattern`,
+          question: q1,
+          options: opts1,
+          step: 1,
+          totalSteps: 3
+        });
+        onChunk(mcq1);
+        return mcq1;
+      }
     }
 
-    // Step 2: Severity & Triggers Question
+    // Step 2: Severity & Triggers Question (2nd user message = first MCQ answer)
     if (userMsgCount === 2) {
       const mcq2 = JSON.stringify({
         thinking: `Evaluating ${symptomName} intensity and timing`,
@@ -252,7 +258,7 @@ export async function callAPIStream(text, image, section, prevHistory = [], onCh
       return mcq2;
     }
 
-    // Step 3: Associated Symptoms Question
+    // Step 3: Associated Symptoms Question (3rd user message = second MCQ answer)
     if (userMsgCount === 3) {
       const mcq3 = JSON.stringify({
         thinking: `Checking accompanying symptoms for ${symptomName}`,
@@ -265,7 +271,7 @@ export async function callAPIStream(text, image, section, prevHistory = [], onCh
       return mcq3;
     }
 
-    // Step 4: Final Diagnostic Report tailored to exact symptom
+    // Step 4: Final Diagnostic Report (4th user message = third MCQ answer)
     if (userMsgCount >= 4) {
       const answersText = userMsgs.map(m => m.text).join(' → ');
       let primaryCondition = "Carpal Tunnel Syndrome / Repetitive Strain — 55%";
