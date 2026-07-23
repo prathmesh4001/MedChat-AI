@@ -249,20 +249,19 @@ async function apiFetch(path, options = {}) {
 
   try {
     const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
-    const data = await res.json().catch(() => ({}));
-
     if (!res.ok) {
-      if (data.error) {
-        throw new Error(data.error);
-      }
-      if ([404, 405, 502, 503].includes(res.status)) {
+      if (res.status === 405 || res.status === 404 || res.status >= 500) {
         return handleLocalFallback(path, options);
       }
-      throw new Error(`Request failed (${res.status})`);
+      const data = await res.json().catch(() => ({}));
+      if (data.error && data.error !== 'Method Not Allowed') {
+        throw new Error(data.error);
+      }
+      return handleLocalFallback(path, options);
     }
-    return data;
+    return await res.json().catch(() => ({}));
   } catch (err) {
-    if (err.message && !err.message.includes('Failed to fetch') && !err.message.includes('NetworkError') && !err.message.includes('Request failed')) {
+    if (err.message === 'Invalid email or password' || err.message === 'An account with this email already exists') {
       throw err;
     }
     return handleLocalFallback(path, options);

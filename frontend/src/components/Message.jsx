@@ -142,23 +142,26 @@ function WebImagesGallery({ images, dark }) {
   );
 }
 
-export default function Message({ msg, theme, onCopy }) {
+export default function Message({ msg, message, theme, onCopy }) {
+  const m = message || msg;
+  if (!m) return null;
+
   const dark = theme === 'dark';
-  const isUser = msg.role === 'user';
+  const isUser = m.role === 'user';
   const [showReport, setShowReport] = useState(false);
   const { t } = useLanguage();
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(msg.text).then(() => { if (onCopy) onCopy(); }).catch(() => {});
+    navigator.clipboard.writeText(m.text || '').then(() => { if (onCopy) onCopy(); }).catch(() => {});
   };
 
-  const isReport = !isUser && msg.text && (msg.text.includes('Diagnostic Report') || msg.text.includes('Differential Diagnosis'));
+  const isReport = !isUser && m.text && (m.text.includes('Diagnostic Report') || m.text.includes('Differential Diagnosis'));
 
   // Parse differential diagnosis for chart
-  const diffDx = !isUser && msg.text ? parseDifferentialDiagnosis(msg.text) : null;
+  const diffDx = !isUser && m.text ? parseDifferentialDiagnosis(m.text) : null;
 
   // Remove the raw differential lines from text if chart will be rendered
-  let displayText = msg.text || '';
+  let displayText = m.text || '';
   if (diffDx && displayText) {
     // We'll let the markdown render the full text, but inject chart after
   }
@@ -184,10 +187,10 @@ export default function Message({ msg, theme, onCopy }) {
             color: 'var(--on-surface)',
             boxShadow: !isUser ? `inset 0 0 0 1px ${dark ? 'rgba(63,73,73,0.15)' : 'rgba(203,213,225,0.3)'}` : 'none',
           }}>
-          {!isUser && msg.text && (
+          {!isUser && m.text && (
             <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-xl px-1 py-0.5 backdrop-blur-xl"
               style={{ background: dark ? 'rgba(19,27,46,0.9)' : 'rgba(255,255,255,0.9)' }}>
-              <VoiceButton text={msg.text} theme={theme} />
+              <VoiceButton text={m.text} theme={theme} />
               <button onClick={handleCopy} title="Copy"
                 className="w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-200 hover:scale-110"
                 style={{ color: 'var(--outline)' }}>
@@ -198,10 +201,10 @@ export default function Message({ msg, theme, onCopy }) {
             </div>
           )}
 
-          {msg.image && (
-            <img src={msg.image} alt="Medical image" className="max-w-[280px] max-h-[280px] rounded-xl mb-2" />
+          {m.image && (
+            <img src={m.image} alt="Medical image" className="max-w-[280px] max-h-[280px] rounded-xl mb-2" />
           )}
-          {msg.text && (
+          {m.text && (
             <div className={`msg-content ${dark ? 'msg-dark' : ''}`} dangerouslySetInnerHTML={{ __html: formatMd(displayText) }} />
           )}
 
@@ -209,8 +212,8 @@ export default function Message({ msg, theme, onCopy }) {
           {diffDx && <DiagnosisChart items={diffDx} dark={dark} />}
 
           {/* Web search images gallery */}
-          {!isUser && msg.webImages?.length > 0 && (
-            <WebImagesGallery images={msg.webImages} dark={dark} />
+          {!isUser && m.webImages?.length > 0 && (
+            <WebImagesGallery images={m.webImages} dark={dark} />
           )}
 
           {/* Report footer with RAG badge */}
