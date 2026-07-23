@@ -16,30 +16,74 @@ export function clearToken() {
   localStorage.removeItem('medchat-demo-user');
 }
 
+// ─── Local User Store for Offline / Preview Modes ──────────
+function getRegisteredUsers() {
+  try {
+    return JSON.parse(localStorage.getItem('medchat-users-db') || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function saveRegisteredUsers(users) {
+  localStorage.setItem('medchat-users-db', JSON.stringify(users));
+}
+
 // ─── Local Fallback for Offline / Preview Modes ────────────
 function handleLocalFallback(path, options) {
   const body = options.body ? JSON.parse(options.body) : {};
 
-  if (path === '/api/auth/login' || path === '/api/auth/signup') {
-    const user = {
-      id: 'demo_usr_' + Date.now(),
-      email: body.email || 'doctor@medchat.ai',
+  if (path === '/api/auth/signup') {
+    const users = getRegisteredUsers();
+    const cleanEmail = (body.email || '').toLowerCase().trim();
+    const existing = users.find(u => u.email === cleanEmail);
+    if (existing) {
+      throw new Error('An account with this email already exists');
+    }
+    const newUser = {
+      id: 'usr_' + Date.now(),
+      email: cleanEmail,
+      password: body.password,
       fullName: body.fullName || 'Dr. Medical Professional',
     };
-    const mockToken = 'mock_jwt_token_' + Date.now();
+    users.push(newUser);
+    saveRegisteredUsers(users);
+
+    const mockToken = 'mock_jwt_' + Date.now();
     setToken(mockToken);
-    localStorage.setItem('medchat-demo-user', JSON.stringify(user));
-    return { token: mockToken, user };
+    localStorage.setItem('medchat-demo-user', JSON.stringify({ id: newUser.id, email: newUser.email, fullName: newUser.fullName }));
+    return { token: mockToken, user: { id: newUser.id, email: newUser.email, fullName: newUser.fullName } };
+  }
+
+  if (path === '/api/auth/login') {
+    const users = getRegisteredUsers();
+    const cleanEmail = (body.email || '').toLowerCase().trim();
+    const found = users.find(u => u.email === cleanEmail && u.password === body.password);
+    if (!found) {
+      throw new Error('Invalid email or password');
+    }
+    const mockToken = 'mock_jwt_' + Date.now();
+    setToken(mockToken);
+    localStorage.setItem('medchat-demo-user', JSON.stringify({ id: found.id, email: found.email, fullName: found.fullName }));
+    return { token: mockToken, user: { id: found.id, email: found.email, fullName: found.fullName } };
   }
 
   if (path === '/api/auth/me') {
     const stored = localStorage.getItem('medchat-demo-user');
     if (stored) return JSON.parse(stored);
-    return { id: 'demo_usr_default', email: 'doctor@medchat.ai', fullName: 'Dr. Medical Professional' };
+    return null;
   }
 
   if (path === '/api/auth/reset-password') {
+    const users = getRegisteredUsers();
+    const cleanEmail = (body.email || '').toLowerCase().trim();
+    const foundIndex = users.findIndex(u => u.email === cleanEmail);
+    if (foundIndex === -1) {
+      throw new Error('No account found with this email address');
+    }
     if (body.newPassword) {
+      users[foundIndex].password = body.newPassword;
+      saveRegisteredUsers(users);
       return { message: 'Password updated successfully! Please sign in with your new password.' };
     }
     return { message: 'Password reset link sent to your email.' };
