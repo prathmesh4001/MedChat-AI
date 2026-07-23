@@ -225,7 +225,7 @@ export default function Message({ msg, message, theme, onCopy }) {
                 </svg>
                 DIAGNOSTIC REPORT
               </div>
-              {msg.usedRAG && (
+              {m.usedRAG && (
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"
                   style={{ background: dark ? 'rgba(96,165,250,0.08)' : 'rgba(59,130,246,0.06)', color: '#60a5fa' }}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
@@ -235,26 +235,26 @@ export default function Message({ msg, message, theme, onCopy }) {
                   <span className="text-[10px] font-bold">Used uploaded reports</span>
                 </div>
               )}
-              {msg.searchedWith?.length > 0 && (
+              {m.searchedWith?.length > 0 && (
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"
                   style={{ background: dark ? 'rgba(96,165,250,0.08)' : 'rgba(59,130,246,0.06)', color: '#60a5fa' }}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
                     <circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" />
                     <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
                   </svg>
-                  <span className="text-[10px] font-bold">{msg.searchedWith.join(' + ')}</span>
+                  <span className="text-[10px] font-bold">{m.searchedWith.join(' + ')}</span>
                 </div>
               )}
             </div>
           )}
 
           {/* Web Sources for reports */}
-          {isReport && msg.webSources?.length > 0 && (
-            <WebSourcesBadge sources={msg.webSources} searchedWith={msg.searchedWith} dark={dark} />
+          {isReport && m.webSources?.length > 0 && (
+            <WebSourcesBadge sources={m.webSources} searchedWith={m.searchedWith} dark={dark} />
           )}
 
           {/* Non-report RAG badge */}
-          {!isReport && !isUser && msg.usedRAG && (
+          {!isReport && !isUser && m.usedRAG && (
             <div className="mt-2 flex items-center gap-1.5 text-[10px] font-semibold"
               style={{ color: '#60a5fa' }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
@@ -265,13 +265,13 @@ export default function Message({ msg, message, theme, onCopy }) {
           )}
 
           {/* Web Sources for non-report messages */}
-          {!isUser && msg.webSources?.length > 0 && (
-            <WebSourcesBadge sources={msg.webSources} searchedWith={msg.searchedWith} dark={dark} />
+          {!isUser && m.webSources?.length > 0 && (
+            <WebSourcesBadge sources={m.webSources} searchedWith={m.searchedWith} dark={dark} />
           )}
         </div>
-        {msg.timestamp && (
+        {m.timestamp && (
           <div className={`text-[0.62rem] mt-1.5 px-1 ${isUser ? 'text-right' : ''}`} style={{ color: 'var(--outline)' }}>
-            {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </div>
         )}
       </div>

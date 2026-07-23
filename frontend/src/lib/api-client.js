@@ -250,6 +250,15 @@ async function apiFetch(path, options = {}) {
   try {
     const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
     if (!res.ok) {
+      if (res.status === 401) {
+        // For /api/auth/me: token is invalid/expired — clear it and fall back to local
+        if (path === '/api/auth/me') {
+          clearToken();
+          return handleLocalFallback(path, options);
+        }
+        // For document/session/message routes with bad token — fall back silently
+        return handleLocalFallback(path, options);
+      }
       if (res.status === 405 || res.status === 404 || res.status >= 500) {
         return handleLocalFallback(path, options);
       }

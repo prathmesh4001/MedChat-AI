@@ -7,12 +7,31 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ─── Middleware ───────────────────────────────────────────
+// Build dynamic allowed origins list
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  'https://med-chat-ai-neon.vercel.app',   // Vercel production
+];
+// Support comma-separated CLIENT_URL env var for extra origins
+if (process.env.CLIENT_URL) {
+  process.env.CLIENT_URL.split(',').forEach(u => {
+    const trimmed = u.trim();
+    if (trimmed && !allowedOrigins.includes(trimmed)) allowedOrigins.push(trimmed);
+  });
+}
+
 app.use(cors({
-  origin: [
-    process.env.CLIENT_URL || 'http://localhost:5173',
-    'http://localhost:5174',
-    'http://localhost:5175',
-  ],
+  origin: function(origin, callback) {
+    // Allow requests with no origin (curl, Postman, mobile apps, server-to-server)
+    if (!origin) return callback(null, true);
+    // Allow any *.vercel.app deployment (preview builds)
+    if (origin.endsWith('.vercel.app') || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    callback(new Error(`CORS: origin not allowed: ${origin}`));
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: '50mb' }));
