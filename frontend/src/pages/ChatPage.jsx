@@ -229,7 +229,7 @@ export default function ChatPage({ sectionKey, theme, activeSession, onSessionCo
         setStreamingText('');
       }
 
-      const historyForAPI = messages.map(m => ({ role: m.role, text: m.rawText || m.text, image: m.image }));
+      const historyForAPI = messages.map(m => ({ role: m.role, text: m.rawText || m.text, image: m.image, isMcq: m.isMcq }));
       const reply = await callAPIStream(text.trim(), img, sectionKey, historyForAPI, (partial) => { setStreamingText(partial); scrollDown(); }, ragContext, langMeta.name, webSearchContext);
 
       const mcq = (isResearch || webSearchContext) ? null : parseMCQ(reply);

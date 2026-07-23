@@ -227,7 +227,7 @@ export async function callAPIStream(text, image, section, prevHistory = [], onCh
     }
 
     // Step 1: Initial MCQ Question tailored to exact symptom!
-    if (userMsgCount === 0 || !prevHistory.some(m => m.isMcq)) {
+    if (userMsgCount <= 1) {
       const mcq1 = JSON.stringify({
         thinking: `Evaluating ${symptomName} location and clinical pattern`,
         question: q1,
@@ -240,7 +240,7 @@ export async function callAPIStream(text, image, section, prevHistory = [], onCh
     }
 
     // Step 2: Severity & Triggers Question
-    if (userMsgCount === 1) {
+    if (userMsgCount === 2) {
       const mcq2 = JSON.stringify({
         thinking: `Evaluating ${symptomName} intensity and timing`,
         question: `When does the ${symptomName} worsen or feel most intense?`,
@@ -253,7 +253,7 @@ export async function callAPIStream(text, image, section, prevHistory = [], onCh
     }
 
     // Step 3: Associated Symptoms Question
-    if (userMsgCount === 2) {
+    if (userMsgCount === 3) {
       const mcq3 = JSON.stringify({
         thinking: `Checking accompanying symptoms for ${symptomName}`,
         question: `Are you experiencing any other symptoms alongside your ${symptomName}?`,
@@ -266,7 +266,7 @@ export async function callAPIStream(text, image, section, prevHistory = [], onCh
     }
 
     // Step 4: Final Diagnostic Report tailored to exact symptom
-    if (userMsgCount >= 3) {
+    if (userMsgCount >= 4) {
       const answersText = userMsgs.map(m => m.text).join(' → ');
       let primaryCondition = "Carpal Tunnel Syndrome / Repetitive Strain — 55%";
       let secondaryCondition = "Arthritis / Joint Inflammation — 30%";
