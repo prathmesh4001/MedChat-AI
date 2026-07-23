@@ -340,18 +340,34 @@ Moderate Urgency. If symptoms persist beyond 5-7 days, consult a physician or cl
 - *Global Health Evidence Database*`;
   } else {
     const scanName = (section || 'X-Ray').toUpperCase();
-    responseText = `### 📋 Radiological Diagnostic Report (${scanName})
+    responseText = `## Diagnostic Report
 
-**Study Status:** ✅ Image & Scan Data Processed
+### Image Overview
+Radiographs processed for AI-assisted diagnostic review. Image structural density, anatomical boundaries, and alignment evaluated.
 
-#### 🔍 Clinical & Radiological Findings:
-1. **Anatomical Alignment:** Normal structural alignment with preserved joint spaces and soft tissue outlines.
-2. **Pathology Assessment:** No acute fracture, pneumothorax, midline shift, or focal mass lesion identified.
-3. **Tissue Density / Signal:** Homogeneous signal intensity across visualized fields.
+### Anatomical Findings
+- **Bones & Joint Spaces:** Cortical margins intact. Joint spaces preserved without acute joint narrowing, deformity, or dislocation.
+- **Soft Tissues & Density:** Preserved soft tissue contours without significant localized swelling, radiopaque foreign body, or abnormal density.
 
-#### 💡 Impression & Recommendation:
-- No acute diagnostic abnormalities detected on preliminary AI review.
-- Correlate findings with clinical examination and patient symptom history.`;
+### Abnormalities Detected
+No acute cortical fracture, dislocation, destructive bony lesion, or focal soft tissue mass identified.
+
+### Probable Diagnosis
+- **Normal Radiological Study — 85%** — No acute traumatic or osseous pathology detected.
+- **Localized Soft Tissue / Muscular Strain — 15%** — Clinical correlation recommended if pain or discomfort persists.
+
+### Recommended Treatment
+- **Immediate Actions:** Rest and protect the affected area; apply cool compress if acute swelling is present.
+- **Medications:** Over-the-counter anti-inflammatory or analgesic medication (e.g., Ibuprofen) if appropriate.
+- **Specialist Referral:** Consult an orthopedic specialist or primary care provider if symptoms persist beyond 5-7 days.
+
+### Warning Signs — Seek Emergency Care If
+- Severe sudden deformity, acute loss of sensation, or inability to move the affected limb/joint.
+
+### Assessment Summary
+Low Urgency. No acute fracture or structural dislocation detected on preliminary AI review.
+
+*This is AI-assisted analysis — always confirm with a radiologist.*`;
   }
 
   let streamed = '';
