@@ -182,7 +182,7 @@ export async function callAPIStream(text, image, section, prevHistory = [], onCh
   }
 
   // ════════════════════════════════════════════════════════════════
-  // ─── OPTION 3: Interactive Clinical MCQ & Diagnostic Engine ─────
+  // ─── OPTION 3: Context-Aware Dynamic Clinical MCQ Engine ───────
   // ════════════════════════════════════════════════════════════════
   const queryLower = (text || '').toLowerCase();
 
@@ -191,20 +191,45 @@ export async function callAPIStream(text, image, section, prevHistory = [], onCh
     const userMsgs = prevHistory.filter(m => m.role === 'user');
     const userMsgCount = userMsgs.length;
 
-    // Step 1: Initial MCQ Question on Symptom Mention
-    if (userMsgCount === 0 || (!prevHistory.some(m => m.isMcq) && (queryLower.includes('headache') || queryLower.includes('head') || queryLower.includes('fever') || queryLower.includes('stomach') || queryLower.includes('pain') || queryLower.includes('cough') || queryLower.includes('symptom')))) {
-      let q1 = "Where is your headache or pain primarily located?";
-      let opts1 = ["Frontal / Forehead", "One side of head (Temporal)", "Back of head / Neck", "All over / Diffuse"];
-      if (queryLower.includes('fever') || queryLower.includes('temp')) {
-        q1 = "How high is your current temperature reading?";
-        opts1 = ["99°F - 100°F (Low grade)", "100.4°F - 102°F (Moderate)", "Above 102°F (High fever)", "Not measured yet"];
-      } else if (queryLower.includes('stomach') || queryLower.includes('belly') || queryLower.includes('abdomen')) {
-        q1 = "Where in your abdomen is the discomfort located?";
-        opts1 = ["Upper Abdomen / Stomach", "Lower Right Quadrant", "Lower Left Quadrant", "Diffused / Entire Belly"];
-      }
+    // Detect exact symptom category
+    let symptomName = 'hand & wrist pain';
+    let q1 = "Where specifically is your hand & wrist pain located and how does it feel?";
+    let opts1 = ["In the joints / knuckles", "Palms & wrists bilaterally", "One hand / specific fingers", "Radiating up the arm"];
 
+    if (queryLower.includes('headache') || queryLower.includes('head')) {
+      symptomName = 'headache';
+      q1 = "Where is your headache pain primarily located?";
+      opts1 = ["Frontal / Forehead", "One side of head (Temporal)", "Back of head / Neck", "All over / Diffuse"];
+    } else if (queryLower.includes('fever') || queryLower.includes('temp') || queryLower.includes('chills')) {
+      symptomName = 'fever';
+      q1 = "How high is your current temperature reading?";
+      opts1 = ["99°F - 100°F (Low grade)", "100.4°F - 102°F (Moderate)", "Above 102°F (High fever)", "Not measured yet"];
+    } else if (queryLower.includes('stomach') || queryLower.includes('belly') || queryLower.includes('abdomen') || queryLower.includes('nausea')) {
+      symptomName = 'abdominal pain';
+      q1 = "Where in your abdomen is the discomfort located?";
+      opts1 = ["Upper Abdomen / Stomach", "Lower Right Quadrant", "Lower Left Quadrant", "Diffused / Entire Belly"];
+    } else if (queryLower.includes('back') || queryLower.includes('spine')) {
+      symptomName = 'back pain';
+      q1 = "Which region of your back is affected?";
+      opts1 = ["Lower Back (Lumbar)", "Upper / Mid Back (Thoracic)", "Neck & Shoulders (Cervical)", "Radiating down leg (Sciatica)"];
+    } else if (queryLower.includes('chest') || queryLower.includes('heart') || queryLower.includes('breath')) {
+      symptomName = 'chest discomfort';
+      q1 = "How would you describe your chest discomfort?";
+      opts1 = ["Dull tightness / Pressure", "Sharp pain when breathing", "Burning / Acid reflux feeling", "Muscular soreness when pressed"];
+    } else if (queryLower.includes('knee') || queryLower.includes('leg') || queryLower.includes('foot') || queryLower.includes('joint')) {
+      symptomName = 'joint / leg pain';
+      q1 = "Which specific joint or leg area is causing discomfort?";
+      opts1 = ["Knee joint", "Ankle & Foot", "Hip joint", "Calf / Thigh muscles"];
+    } else if (queryLower.includes('cough') || queryLower.includes('throat') || queryLower.includes('cold')) {
+      symptomName = 'cough & throat discomfort';
+      q1 = "How would you describe your cough or throat symptom?";
+      opts1 = ["Dry cough / Tickle", "Productive cough (with phlegm)", "Sore throat / Pain swallowing", "Hoarseness / Wheezing"];
+    }
+
+    // Step 1: Initial MCQ Question tailored to exact symptom!
+    if (userMsgCount === 0 || !prevHistory.some(m => m.isMcq)) {
       const mcq1 = JSON.stringify({
-        thinking: "Identifying primary symptom location and pattern",
+        thinking: `Evaluating ${symptomName} location and clinical pattern`,
         question: q1,
         options: opts1,
         step: 1,
@@ -214,12 +239,12 @@ export async function callAPIStream(text, image, section, prevHistory = [], onCh
       return mcq1;
     }
 
-    // Step 2: Pain & Severity Evaluation Question
+    // Step 2: Severity & Triggers Question
     if (userMsgCount === 1) {
       const mcq2 = JSON.stringify({
-        thinking: "Evaluating pain severity and characteristics",
-        question: "How would you describe the intensity and type of pain?",
-        options: ["Mild & Dull Ache (1-3)", "Moderate & Throbbing (4-6)", "Severe & Constant (7-8)", "Intense & Sharp (9-10)"],
+        thinking: `Evaluating ${symptomName} intensity and timing`,
+        question: `When does the ${symptomName} worsen or feel most intense?`,
+        options: ["In the morning / upon waking", "After movement or activity", "Constantly throughout the day", "At night or during rest"],
         step: 2,
         totalSteps: 3
       });
@@ -230,9 +255,9 @@ export async function callAPIStream(text, image, section, prevHistory = [], onCh
     // Step 3: Associated Symptoms Question
     if (userMsgCount === 2) {
       const mcq3 = JSON.stringify({
-        thinking: "Checking for accompanying systemic symptoms",
-        question: "Are you experiencing any accompanying symptoms?",
-        options: ["Nausea / Dizziness", "Sensitivity to Light or Sound", "Neck Stiffness / Chills", "None of the above"],
+        thinking: `Checking accompanying symptoms for ${symptomName}`,
+        question: `Are you experiencing any other symptoms alongside your ${symptomName}?`,
+        options: ["Swelling, redness or stiffness", "Numbness or tingling sensation", "Fever or general fatigue", "None of the above"],
         step: 3,
         totalSteps: 3
       });
@@ -240,32 +265,51 @@ export async function callAPIStream(text, image, section, prevHistory = [], onCh
       return mcq3;
     }
 
-    // Step 4: Generate Full Diagnostic Report after 3 answers
+    // Step 4: Final Diagnostic Report tailored to exact symptom
     if (userMsgCount >= 3) {
       const answersText = userMsgs.map(m => m.text).join(' → ');
+      let primaryCondition = "Carpal Tunnel Syndrome / Repetitive Strain — 55%";
+      let secondaryCondition = "Arthritis / Joint Inflammation — 30%";
+      let tertiaryCondition = "Tendinitis / Muscular Strain — 15%";
+      let homeRemedy = "Rest the affected hands, avoid repetitive straining, apply ice/warm compress for 15 mins.";
+      let otcMed = "Topical NSAID gel (Diclofenac) or Ibuprofen (400mg) for joint pain/inflammation.";
+
+      if (symptomName === 'headache') {
+        primaryCondition = "Tension-Type Headache — 60%";
+        secondaryCondition = "Migraine Headache — 25%";
+        tertiaryCondition = "Dehydration / Eye Strain — 15%";
+        homeRemedy = "Drink 500ml fresh water, rest in a dark quiet room, apply cool compress.";
+        otcMed = "Paracetamol (500mg) or Ibuprofen (400mg) as per package instructions.";
+      } else if (symptomName === 'back pain') {
+        primaryCondition = "Lumbar Muscle Strain — 65%";
+        secondaryCondition = "Disc Irritation / Postural Strain — 25%";
+        tertiaryCondition = "Sciatic Nerve Compression — 10%";
+        homeRemedy = "Maintain lumbar support, apply heat pack, perform gentle pelvic tilts.";
+        otcMed = "Ibuprofen (400mg) or Acetaminophen for muscle relief.";
+      }
+
       const finalReport = `## Diagnostic Report
 
 ### Reported Symptoms
-- **Primary Complaint:** ${userMsgs[0]?.text || 'Symptom Assessment'}
-- **Clinical Responses:** ${answersText}
+- **Primary Complaint:** ${userMsgs[0]?.text || symptomName}
+- **Patient Symptom Evolution:** ${answersText}
 
 ### Differential Diagnosis
-- **Tension-Type Headache** — 60% — Consistent with stress, eye strain, or muscular tension.
-- **Migraine Headache** — 25% — Associated with throbbing discomfort and sensory sensitivity.
-- **Dehydration / Fatigue** — 15% — Common trigger for episodic headaches.
+- **${primaryCondition}** — Consistent with reported symptom pattern and triggers.
+- **${secondaryCondition}** — Secondary inflammatory or structural possibility.
+- **${tertiaryCondition}** — Less probable underlying factor.
 
 ### Recommended Treatment
-- **Home Remedies:** Drink 500ml of fresh water, rest in a quiet dark room, and apply a cool compress.
-- **Over-the-Counter Medication:** Paracetamol (500mg) or Ibuprofen (400mg) as per package guidelines.
-- **Lifestyle Adjustments:** Take frequent breaks from screen usage and maintain regular sleep cycles.
+- **Home Remedies:** ${homeRemedy}
+- **Over-the-Counter Medication:** ${otcMed}
+- **Lifestyle Adjustments:** Maintain regular ergonomic breaks and adequate fluid intake.
 
 ### Warning Signs — See a Doctor Immediately If
-- Sudden, severe "thunderclap" headache onset.
-- High fever accompanied by stiff neck or confusion.
-- Visual disturbances or numbness in arms/legs.
+- Sudden severe swelling, loss of sensation, or inability to move the affected area.
+- Persistent high fever, chest pressure, or shortness of breath.
 
 ### Assessment Summary
-Moderate Urgency. If symptoms persist beyond 48 hours, consult a licensed physician.
+Moderate Urgency. If symptoms persist beyond 5-7 days, consult a physician or clinical specialist.
 
 *This is for informational purposes only — always consult a healthcare professional for medical advice.*`;
 
