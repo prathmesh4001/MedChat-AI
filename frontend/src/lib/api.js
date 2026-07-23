@@ -27,7 +27,7 @@ export async function callAPIStream(text, image, section, prevHistory = [], onCh
   // ════════════════════════════════════════════════════════════════
   // ─── OPTION 1: Google Gemini API (gemini-1.5-flash / gemini-2.0-flash)
   // ════════════════════════════════════════════════════════════════
-  if (GEMINI_API_KEY && GEMINI_API_KEY.startsWith('AIzaSy')) {
+  if (GEMINI_API_KEY) {
     const getCleanBase64 = (b64Str) => {
       const idx = b64Str.indexOf(';base64,');
       return idx !== -1 ? b64Str.substring(idx + 8) : b64Str;

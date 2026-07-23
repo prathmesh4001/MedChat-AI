@@ -51,7 +51,7 @@ export async function extractTextFromImage(file) {
   const base64Data = base64Full.split(',')[1];
   const mimeType = file.type || 'image/jpeg';
 
-  if (GEMINI_API_KEY && GEMINI_API_KEY.startsWith('AIzaSy')) {
+  if (GEMINI_API_KEY) {
     try {
       const response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
         method: 'POST',
