@@ -60,6 +60,7 @@ function handleLocalFallback(path, options) {
     const cleanEmail = (body.email || '').toLowerCase().trim();
     const found = users.find(u => u.email === cleanEmail && u.password === body.password);
     if (!found) {
+      clearToken();
       throw new Error('Invalid email or password');
     }
     const mockToken = 'mock_jwt_' + Date.now();
@@ -71,7 +72,8 @@ function handleLocalFallback(path, options) {
   if (path === '/api/auth/me') {
     const stored = localStorage.getItem('medchat-demo-user');
     if (stored) return JSON.parse(stored);
-    return null;
+    clearToken();
+    throw new Error('Not logged in');
   }
 
   if (path === '/api/auth/reset-password') {
@@ -179,12 +181,17 @@ export async function apiSignup(email, password, fullName = '') {
 }
 
 export async function apiLogin(email, password) {
-  const data = await apiFetch('/api/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
-  });
-  if (data.token) setToken(data.token);
-  return data;
+  try {
+    const data = await apiFetch('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    if (data.token) setToken(data.token);
+    return data;
+  } catch (err) {
+    clearToken();
+    throw err;
+  }
 }
 
 export async function apiMe() {
