@@ -240,7 +240,9 @@ export default function ChatPage({ sectionKey, theme, activeSession, onSessionCo
           timestamp: new Date().toISOString(), usedRAG: !!ragContext,
           webSources, searchedWith, webImages,
         }]);
-        persistMessage('assistant', reply, { type: 'mcq', step: mcq.step });
+        if (currentSessId) {
+          apiSaveMessage(currentSessId, 'assistant', reply, null, { type: 'mcq', step: mcq.step }).catch(() => {});
+        }
       } else {
         setMcqData(null);
         setMcqRetryInfo(null);
@@ -249,11 +251,13 @@ export default function ChatPage({ sectionKey, theme, activeSession, onSessionCo
           timestamp: new Date().toISOString(), usedRAG: !!ragContext,
           webSources, searchedWith, webImages,
         }]);
-        persistMessage('assistant', reply, {
-          type: reply.includes('Diagnostic Report') ? 'report' : 'chat',
-          usedRAG: !!ragContext,
-          webSources: webSources.length,
-        });
+        if (currentSessId) {
+          apiSaveMessage(currentSessId, 'assistant', reply, null, {
+            type: reply.includes('Diagnostic Report') ? 'report' : 'chat',
+            usedRAG: !!ragContext,
+            webSources: webSources.length,
+          }).catch(() => {});
+        }
       }
       setStreamingText('');
     } catch (err) {
