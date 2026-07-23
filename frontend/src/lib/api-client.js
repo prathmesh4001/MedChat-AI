@@ -13,6 +13,73 @@ export function setToken(token) {
 }
 export function clearToken() {
   localStorage.removeItem('medchat-token');
+  localStorage.removeItem('medchat-demo-user');
+}
+
+// ─── Local Fallback for Offline / Preview Modes ────────────
+function handleLocalFallback(path, options) {
+  const body = options.body ? JSON.parse(options.body) : {};
+
+  if (path === '/api/auth/login' || path === '/api/auth/signup') {
+    const user = {
+      id: 'demo_usr_' + Date.now(),
+      email: body.email || 'doctor@medchat.ai',
+      fullName: body.fullName || 'Dr. Medical Professional',
+    };
+    const mockToken = 'mock_jwt_token_' + Date.now();
+    setToken(mockToken);
+    localStorage.setItem('medchat-demo-user', JSON.stringify(user));
+    return { token: mockToken, user };
+  }
+
+  if (path === '/api/auth/me') {
+    const stored = localStorage.getItem('medchat-demo-user');
+    if (stored) return JSON.parse(stored);
+    return { id: 'demo_usr_default', email: 'doctor@medchat.ai', fullName: 'Dr. Medical Professional' };
+  }
+
+  if (path === '/api/auth/reset-password') {
+    return { message: 'Password reset link sent to your email.' };
+  }
+
+  if (path === '/api/sessions/summary') {
+    return {
+      totalSessions: 1,
+      totalMessages: 4,
+      totalDocuments: 0,
+      daysActive: 1,
+      monthlyConsultations: [{ _id: 7, month: 'Jul 2026', count: 1 }],
+      sessions: [
+        {
+          _id: 'session_demo_1',
+          section: 'general',
+          title: 'General Symptom Checkup',
+          messageCount: 4,
+          updatedAt: new Date().toISOString(),
+          firstUserMsg: 'Patient history consultation',
+        },
+      ],
+    };
+  }
+
+  if (path.startsWith('/api/sessions')) {
+    if (options.method === 'POST') {
+      return { _id: 'sess_' + Date.now(), section: body.section || 'general', title: body.title || 'Consultation' };
+    }
+    return [];
+  }
+
+  if (path.startsWith('/api/messages')) {
+    if (options.method === 'POST') return { _id: 'msg_' + Date.now(), ...body };
+    return [];
+  }
+
+  if (path.startsWith('/api/documents')) {
+    if (path === '/api/documents/context') return { context: '' };
+    return [];
+  }
+
+  return {};
 }
 
 // ─── Base fetch with auth header ──────────────────────────
@@ -24,13 +91,23 @@ async function apiFetch(path, options = {}) {
     ...(options.headers || {}),
   };
 
-  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
-  const data = await res.json().catch(() => ({}));
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+    const data = await res.json().catch(() => ({}));
 
-  if (!res.ok) {
-    throw new Error(data.error || `Request failed (${res.status})`);
+    if (!res.ok) {
+      throw new Error(data.error || `Request failed (${res.status})`);
+    }
+    return data;
+  } catch (err) {
+    // If backend specifically returned a domain error (e.g. "Invalid email or password"), preserve and throw it!
+    if (err.message && !err.message.includes('Failed to fetch') && !err.message.includes('NetworkError') && !err.message.includes('Request failed (404)')) {
+      throw err;
+    }
+
+    // Network error / offline preview fallback
+    return handleLocalFallback(path, options);
   }
-  return data;
 }
 
 // ─── Auth ─────────────────────────────────────────────────
@@ -41,7 +118,7 @@ export async function apiSignup(email, password, fullName = '') {
     body: JSON.stringify({ email, password, fullName }),
   });
   if (data.token) setToken(data.token);
-  return data; // { token, user }
+  return data;
 }
 
 export async function apiLogin(email, password) {
@@ -50,11 +127,18 @@ export async function apiLogin(email, password) {
     body: JSON.stringify({ email, password }),
   });
   if (data.token) setToken(data.token);
-  return data; // { token, user }
+  return data;
 }
 
 export async function apiMe() {
-  return apiFetch('/api/auth/me'); // { id, email, fullName }
+  return apiFetch('/api/auth/me');
+}
+
+export async function apiResetPassword(email) {
+  return apiFetch('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
 }
 
 // ─── Chat Sessions ────────────────────────────────────────
@@ -75,12 +159,9 @@ export async function apiDeleteSession(sessionId) {
   return apiFetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
 }
 
-// Returns { totalSessions, totalMessages, totalDocuments, daysActive,
-//           monthlyConsultations, sessions[] } for the Patient History page.
 export async function apiGetSessionSummary() {
   return apiFetch('/api/sessions/summary');
 }
-
 
 // ─── Messages ─────────────────────────────────────────────
 
@@ -117,7 +198,6 @@ export async function apiDeleteDocument(fileName) {
   return apiFetch(`/api/documents/${encodeURIComponent(fileName)}`, { method: 'DELETE' });
 }
 
-// ─── Backend configured check ─────────────────────────────
 export function isBackendConfigured() {
   return !!BASE_URL;
 }

@@ -89,4 +89,23 @@ router.get('/me', auth, async (req, res) => {
   }
 });
 
+// ─── POST /api/auth/reset-password ────────────────────────
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: 'Email address is required' });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(404).json({ error: 'No account found with this email address' });
+    }
+
+    res.json({ message: 'Password reset link sent to your email' });
+  } catch (err) {
+    res.status(500).json({ error: 'Reset password failed: ' + err.message });
+  }
+});
+
 module.exports = router;

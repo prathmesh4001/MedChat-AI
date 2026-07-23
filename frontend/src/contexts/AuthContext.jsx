@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { apiSignup, apiLogin, apiMe, clearToken, getToken } from '../lib/api-client';
+import { apiSignup, apiLogin, apiMe, apiResetPassword, clearToken, getToken } from '../lib/api-client';
 
 const AuthContext = createContext(null);
 
@@ -40,10 +40,9 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
-  // resetPassword and signInWithGoogle are removed (not supported in JWT auth).
-  // Add your own email-based reset flow here if needed.
-  const resetPassword = async () => {
-    throw new Error('Password reset is not yet available in this version.');
+  // ─── Reset Password ────────────────────────────────────
+  const resetPassword = async (email) => {
+    return apiResetPassword(email);
   };
 
   const value = { user, loading, signUp, signIn, signOut, resetPassword };
