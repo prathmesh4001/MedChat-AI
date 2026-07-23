@@ -228,7 +228,7 @@ export default function ScanAnalysis({ sectionKey, theme, activeSession, onSessi
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={handleFile} />
 
       {/* ═══ LEFT: DICOM Viewer ═══ */}
-      <div className="w-[55%] flex flex-col min-h-0 max-lg:hidden" style={{ background: dark ? '#060e20' : '#0f172a' }}>
+      <div className="w-full lg:w-[55%] flex flex-col min-h-0" style={{ background: dark ? '#060e20' : '#0f172a' }}>
         {/* Toolbar */}
         <div className="flex items-center justify-between px-4 py-2" style={{ background: 'rgba(0,0,0,0.3)' }}>
           <div className="flex items-center gap-2">
