@@ -139,7 +139,7 @@ export default function ScanAnalysis({ sectionKey, theme, activeSession, onSessi
     if (!sessionIdRef.current) {
       try {
         const session = await apiCreateSession(sectionKey, `${cfg.sectionName} Analysis`);
-        if (session) sessionIdRef.current = session.id;
+        if (session) sessionIdRef.current = session.id || session._id;
       } catch (err) {
         console.warn('Session creation failed:', err.message);
       }

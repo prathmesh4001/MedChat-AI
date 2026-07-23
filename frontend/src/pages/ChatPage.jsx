@@ -158,7 +158,7 @@ export default function ChatPage({ sectionKey, theme, activeSession, onSessionCo
     if (!sessionIdRef.current && user) {
       try {
         const session = await apiCreateSession(sectionKey, text.trim().slice(0, 80));
-        if (session) sessionIdRef.current = session.id;
+        if (session) sessionIdRef.current = session.id || session._id;
       } catch (err) {
         console.warn('Session creation failed:', err.message);
       }

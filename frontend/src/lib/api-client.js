@@ -16,17 +16,26 @@ export function clearToken() {
   localStorage.removeItem('medchat-demo-user');
 }
 
-// ─── Local User Store for Offline / Preview Modes ──────────
+// ─── Local DB Helpers for Offline / Preview Modes ─────────
 function getRegisteredUsers() {
-  try {
-    return JSON.parse(localStorage.getItem('medchat-users-db') || '[]');
-  } catch {
-    return [];
-  }
+  try { return JSON.parse(localStorage.getItem('medchat-users-db') || '[]'); } catch { return []; }
 }
-
 function saveRegisteredUsers(users) {
   localStorage.setItem('medchat-users-db', JSON.stringify(users));
+}
+
+function getLocalSessions() {
+  try { return JSON.parse(localStorage.getItem('medchat-sessions-db') || '[]'); } catch { return []; }
+}
+function saveLocalSessions(sessions) {
+  localStorage.setItem('medchat-sessions-db', JSON.stringify(sessions));
+}
+
+function getLocalMessages() {
+  try { return JSON.parse(localStorage.getItem('medchat-messages-db') || '[]'); } catch { return []; }
+}
+function saveLocalMessages(msgs) {
+  localStorage.setItem('medchat-messages-db', JSON.stringify(msgs));
 }
 
 // ─── Local Fallback for Offline / Preview Modes ────────────
@@ -92,35 +101,95 @@ function handleLocalFallback(path, options) {
   }
 
   if (path === '/api/sessions/summary') {
+    const sessions = getLocalSessions();
+    const messages = getLocalMessages();
+
+    // Map sessions to summary format
+    const formattedSessions = sessions.map(s => {
+      const sessMsgs = messages.filter(m => m.sessionId === s.id || m.sessionId === s._id);
+      const firstUserMsg = sessMsgs.find(m => m.role === 'user')?.content || 'Consultation session';
+      return {
+        _id: s.id || s._id,
+        id: s.id || s._id,
+        section: s.section,
+        title: s.title,
+        messageCount: sessMsgs.length || s.messageCount || 1,
+        updatedAt: s.updatedAt || new Date().toISOString(),
+        firstUserMsg,
+      };
+    });
+
     return {
-      totalSessions: 1,
-      totalMessages: 4,
+      totalSessions: formattedSessions.length,
+      totalMessages: messages.length,
       totalDocuments: 0,
-      daysActive: 1,
-      monthlyConsultations: [{ _id: 7, month: 'Jul 2026', count: 1 }],
-      sessions: [
-        {
-          _id: 'session_demo_1',
-          section: 'general',
-          title: 'General Symptom Checkup',
-          messageCount: 4,
-          updatedAt: new Date().toISOString(),
-          firstUserMsg: 'Patient history consultation',
-        },
-      ],
+      daysActive: formattedSessions.length ? 1 : 0,
+      monthlyConsultations: [{ _id: new Date().getMonth() + 1, month: 'Current Month', count: formattedSessions.length }],
+      sessions: formattedSessions,
     };
   }
 
-  if (path.startsWith('/api/sessions')) {
-    if (options.method === 'POST') {
-      return { _id: 'sess_' + Date.now(), section: body.section || 'general', title: body.title || 'Consultation' };
-    }
-    return [];
+  if (path === '/api/sessions' && options.method === 'POST') {
+    const sessions = getLocalSessions();
+    const newSess = {
+      _id: 'sess_' + Date.now(),
+      id: 'sess_' + Date.now(),
+      section: body.section || 'general',
+      title: body.title || 'Consultation',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      messageCount: 0,
+    };
+    sessions.unshift(newSess);
+    saveLocalSessions(sessions);
+    return newSess;
   }
 
-  if (path.startsWith('/api/messages')) {
-    if (options.method === 'POST') return { _id: 'msg_' + Date.now(), ...body };
-    return [];
+  if (path.startsWith('/api/sessions')) {
+    if (options.method === 'DELETE') {
+      const sessId = path.split('/')[3];
+      const sessions = getLocalSessions().filter(s => s.id !== sessId && s._id !== sessId);
+      saveLocalSessions(sessions);
+      return { message: 'Session deleted' };
+    }
+    const sessions = getLocalSessions();
+    if (path.includes('?section=')) {
+      const sec = path.split('?section=')[1];
+      return sessions.filter(s => s.section === sec);
+    }
+    return sessions;
+  }
+
+  if (path === '/api/messages' && options.method === 'POST') {
+    const msgs = getLocalMessages();
+    const newMsg = {
+      _id: 'msg_' + Date.now(),
+      id: 'msg_' + Date.now(),
+      sessionId: body.sessionId,
+      role: body.role,
+      content: body.content,
+      imageUrl: body.imageUrl || null,
+      metadata: body.metadata || {},
+      createdAt: new Date().toISOString(),
+    };
+    msgs.push(newMsg);
+    saveLocalMessages(msgs);
+
+    // Update session messageCount and updatedAt
+    const sessions = getLocalSessions();
+    const idx = sessions.findIndex(s => s.id === body.sessionId || s._id === body.sessionId);
+    if (idx !== -1) {
+      sessions[idx].messageCount = (sessions[idx].messageCount || 0) + 1;
+      sessions[idx].updatedAt = new Date().toISOString();
+      saveLocalSessions(sessions);
+    }
+    return newMsg;
+  }
+
+  if (path.startsWith('/api/messages/')) {
+    const sessId = path.split('/api/messages/')[1];
+    const msgs = getLocalMessages();
+    return msgs.filter(m => m.sessionId === sessId);
   }
 
   if (path.startsWith('/api/documents')) {
