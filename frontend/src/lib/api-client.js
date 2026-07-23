@@ -91,21 +91,31 @@ async function apiFetch(path, options = {}) {
     ...(options.headers || {}),
   };
 
+  const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+  const isPlaceholder = !BASE_URL || BASE_URL.includes('example.com') || (BASE_URL.includes('localhost') && !isLocalhost);
+
+  if (isPlaceholder) {
+    return handleLocalFallback(path, options);
+  }
+
   try {
     const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      throw new Error(data.error || `Request failed (${res.status})`);
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      if ([404, 405, 502, 503].includes(res.status)) {
+        return handleLocalFallback(path, options);
+      }
+      throw new Error(`Request failed (${res.status})`);
     }
     return data;
   } catch (err) {
-    // If backend specifically returned a domain error (e.g. "Invalid email or password"), preserve and throw it!
-    if (err.message && !err.message.includes('Failed to fetch') && !err.message.includes('NetworkError') && !err.message.includes('Request failed (404)')) {
+    if (err.message && !err.message.includes('Failed to fetch') && !err.message.includes('NetworkError') && !err.message.includes('Request failed')) {
       throw err;
     }
-
-    // Network error / offline preview fallback
     return handleLocalFallback(path, options);
   }
 }
