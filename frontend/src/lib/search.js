@@ -20,6 +20,14 @@ const PUBMED_SEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch
 const PUBMED_SUMMARY_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi';
 const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 
+// ─── Fetch with timeout helper ────────────────────────────
+function fetchWithTimeout(url, options = {}, timeoutMs = 6000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal })
+    .finally(() => clearTimeout(timer));
+}
+
 // ─── WHO GHO Indicator Mapping ───────────────────────────
 // Maps common medical terms to WHO GHO indicator codes
 const WHO_INDICATOR_MAP = {
@@ -123,7 +131,7 @@ async function searchWHOStats(query) {
 
   try {
     const url = `${WHO_GHO_BASE}/${indicator.code}?$filter=TimeDim ge 2020&$orderby=TimeDim desc&$top=15`;
-    const res = await fetch(`${CORS_PROXY}${encodeURIComponent(url)}`);
+    const res = await fetchWithTimeout(`${CORS_PROXY}${encodeURIComponent(url)}`);
     if (!res.ok) return null;
 
     const data = await res.json();
@@ -164,7 +172,7 @@ async function searchWHOStats(query) {
 async function searchWHOOutbreaks(query) {
   try {
     const url = `${WHO_DON_URL}?$orderby=PublicationDate desc&$top=5`;
-    const res = await fetch(`${CORS_PROXY}${encodeURIComponent(url)}`);
+    const res = await fetchWithTimeout(`${CORS_PROXY}${encodeURIComponent(url)}`);
     if (!res.ok) return [];
 
     const data = await res.json();
@@ -202,7 +210,7 @@ async function searchWHOOutbreaks(query) {
 async function searchPubMed(query) {
   try {
     const searchUrl = `${PUBMED_SEARCH_URL}?db=pubmed&term=${encodeURIComponent(query)}&retmax=3&retmode=json&sort=relevance`;
-    const searchRes = await fetch(`${CORS_PROXY}${encodeURIComponent(searchUrl)}`);
+    const searchRes = await fetchWithTimeout(`${CORS_PROXY}${encodeURIComponent(searchUrl)}`);
     if (!searchRes.ok) return [];
 
     const searchData = await searchRes.json();
@@ -210,7 +218,7 @@ async function searchPubMed(query) {
     if (ids.length === 0) return [];
 
     const summaryUrl = `${PUBMED_SUMMARY_URL}?db=pubmed&id=${ids.join(',')}&retmode=json`;
-    const summaryRes = await fetch(`${CORS_PROXY}${encodeURIComponent(summaryUrl)}`);
+    const summaryRes = await fetchWithTimeout(`${CORS_PROXY}${encodeURIComponent(summaryUrl)}`);
     if (!summaryRes.ok) return [];
 
     const summaryData = await summaryRes.json();
@@ -235,55 +243,7 @@ async function searchPubMed(query) {
   }
 }
 
-// ─── Tavily (AI-Optimized Web Search) ─────────────────────
-async function searchTavily(query) {
-  const apiKey = import.meta.env.VITE_TAVILY_API_KEY;
-  if (!apiKey) return { results: [], images: [] };
 
-  try {
-    const res = await fetch('https://api.tavily.com/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        api_key: apiKey,
-        query: `${query} medical health latest`,
-        search_depth: 'advanced',
-        include_images: true,
-        include_answer: true,
-        max_results: 5,
-        topic: 'general',
-      }),
-    });
-
-    if (!res.ok) {
-      console.warn('Tavily API error:', res.status);
-      return { results: [], images: [] };
-    }
-
-    const data = await res.json();
-
-    const results = (data.results || []).slice(0, 5).map(r => {
-      let hostname = 'Web';
-      try { hostname = new URL(r.url).hostname.replace('www.', ''); } catch {}
-      return {
-        title: r.title || '',
-        source: hostname,
-        date: '',
-        snippet: r.content || '',
-        url: r.url || '',
-        score: r.score || 0,
-      };
-    });
-
-    const images = (data.images || []).slice(0, 4);
-    const answer = data.answer || '';
-
-    return { results, images, answer };
-  } catch (err) {
-    console.warn('Tavily search error:', err);
-    return { results: [], images: [] };
-  }
-}
 
 // ─── Main Search Orchestrator ─────────────────────────────
 /**
@@ -292,14 +252,20 @@ async function searchTavily(query) {
  * @param {{ searchapi?: boolean, who?: boolean, pubmed?: boolean }} enabledSources - Which sources to query
  * @returns {Promise<{context: string, sources: Array, searchedWith: string[], images: string[]}>}
  */
-export async function searchWeb(query, enabledSources = { searchapi: true, who: true, pubmed: true }) {
+export async function searchWeb(query, enabledSources = { who: true, pubmed: true }, timeoutMs = 8000) {
+  // Wrap entire search in a global timeout so it never blocks the AI response
+  const searchPromise = _searchWebInternal(query, enabledSources);
+  const timeoutPromise = new Promise(resolve =>
+    setTimeout(() => resolve({ context: '', sources: [], searchedWith: [], images: [] }), timeoutMs)
+  );
+  return Promise.race([searchPromise, timeoutPromise]);
+}
+
+async function _searchWebInternal(query, enabledSources = { who: true, pubmed: true }) {
   const searchedWith = [];
   let whoStats = null;
   let whoOutbreaks = [];
   let pubmedResults = [];
-  let newsResults = [];
-  let webImages = [];
-  let tavilyAnswer = '';
 
   // Build promises array based on enabled sources
   const promises = [];
@@ -315,11 +281,6 @@ export async function searchWeb(query, enabledSources = { searchapi: true, who: 
     promises.push(searchPubMed(query));
     promiseKeys.push('pubmed');
   }
-  if (enabledSources.searchapi) {
-    promises.push(searchTavily(query));
-    promiseKeys.push('tavily');
-  }
-
   if (promises.length === 0) {
     return { context: '', sources: [], searchedWith: [], images: [] };
   }
@@ -329,20 +290,6 @@ export async function searchWeb(query, enabledSources = { searchapi: true, who: 
   // Map results back to their keys
   const resultMap = {};
   promiseKeys.forEach((key, i) => { resultMap[key] = results[i]; });
-
-  if (resultMap.tavily?.status === 'fulfilled' && resultMap.tavily.value) {
-    const tavily = resultMap.tavily.value;
-    if (tavily.results?.length > 0) {
-      newsResults = tavily.results;
-      searchedWith.unshift('Web'); // Push to the front
-    }
-    if (tavily.images?.length > 0) {
-      webImages = tavily.images;
-    }
-    if (tavily.answer) {
-      tavilyAnswer = tavily.answer;
-    }
-  }
 
   if (resultMap.stats?.status === 'fulfilled' && resultMap.stats.value) {
     whoStats = resultMap.stats.value;
@@ -360,30 +307,13 @@ export async function searchWeb(query, enabledSources = { searchapi: true, who: 
   }
 
   // If no results from any source, return empty
-  if (!whoStats && whoOutbreaks.length === 0 && pubmedResults.length === 0 && newsResults.length === 0) {
+  if (!whoStats && whoOutbreaks.length === 0 && pubmedResults.length === 0) {
     return { context: '', sources: [], searchedWith: [], images: [] };
   }
 
   // Build formatted context for AI prompt injection
   let context = '';
   const sources = [];
-
-  // Tavily AI-generated answer summary (if available)
-  if (tavilyAnswer) {
-    context += `### AI-Summarized Web Answer:\n${tavilyAnswer}\n\n`;
-  }
-
-  // Web Results (Tavily) - prioritized at the top of context
-  if (newsResults.length > 0) {
-    context += '### Latest Web Results:\n';
-    newsResults.forEach((n, i) => {
-      context += `[W${i + 1}] "${n.title}" — ${n.source}\n${n.snippet}\nLink: ${n.url}\n\n`;
-      sources.push({
-        type: 'news', title: n.title, url: n.url,
-        sourceName: n.source, date: n.date,
-      });
-    });
-  }
 
   // WHO Health Statistics
   if (whoStats && whoStats.data.length > 0) {
@@ -424,6 +354,6 @@ export async function searchWeb(query, enabledSources = { searchapi: true, who: 
     });
   }
 
-  return { context, sources, searchedWith, images: webImages };
+  return { context, sources, searchedWith, images: [] };
 }
 

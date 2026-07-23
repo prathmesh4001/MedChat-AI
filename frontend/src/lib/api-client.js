@@ -75,6 +75,13 @@ export async function apiDeleteSession(sessionId) {
   return apiFetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
 }
 
+// Returns { totalSessions, totalMessages, totalDocuments, daysActive,
+//           monthlyConsultations, sessions[] } for the Patient History page.
+export async function apiGetSessionSummary() {
+  return apiFetch('/api/sessions/summary');
+}
+
+
 // ─── Messages ─────────────────────────────────────────────
 
 export async function apiSaveMessage(sessionId, role, content, imageUrl = null, metadata = {}) {

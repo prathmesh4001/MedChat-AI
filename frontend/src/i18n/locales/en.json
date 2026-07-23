@@ -112,10 +112,10 @@
   "unsupported_format": "{name}: Unsupported format. Use PDF, images, or text files.",
   "failed_process": "Failed to process {name}: {error}",
 
-  "welcome_back": "Welcome back",
+  "welcome_back": "Welcome to MedChat AI",
   "create_account": "Create account",
   "reset_password": "Reset password",
-  "sign_in_desc": "Sign in to access your diagnostics",
+  "sign_in_desc": "Sign in to continue your clinical intelligence journey",
   "sign_up_desc": "Start your clinical intelligence journey",
   "reset_desc": "Enter your email to receive a reset link",
   "full_name": "Full Name",
@@ -139,7 +139,7 @@
   "rag_desc": "Upload reports for personalized AI diagnosis",
   "secure_private": "Secure & Private",
   "secure_desc": "End-to-end encrypted medical data handling",
-  "auth_disclaimer": "AI-generated diagnosis is for informational purposes only.",
+  "auth_disclaimer": "Your data is safe with us. Always.",
 
   "upload_xray": "Upload X-Ray",
   "upload_mri": "Upload MRI",

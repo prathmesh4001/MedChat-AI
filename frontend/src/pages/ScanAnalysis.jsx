@@ -3,7 +3,7 @@ import { callAPIStream } from '../lib/api';
 import { exportDiagnosis } from '../lib/export';
 import Message from '../components/Message';
 import Toast from '../components/Toast';
-import { apiCreateSession, apiSaveMessage } from '../lib/api-client';
+import { apiCreateSession, apiSaveMessage, apiGetMessages } from '../lib/api-client';
 
 const scanConfig = {
   xray: {
@@ -44,7 +44,7 @@ const scanConfig = {
   },
 };
 
-export default function ScanAnalysis({ sectionKey, theme }) {
+export default function ScanAnalysis({ sectionKey, theme, activeSession, onSessionConsumed }) {
   const cfg = scanConfig[sectionKey];
   const dark = theme === 'dark';
   const [image, setImage] = useState(null);
@@ -61,11 +61,64 @@ export default function ScanAnalysis({ sectionKey, theme }) {
   const sessionIdRef = useRef(null);
   const studyId = `${cfg.studyPrefix}-${new Date().getFullYear()}-${String(Math.floor(Math.random()*99)+1).padStart(3,'0')}`;
 
+  // Export Modal States
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [patientName, setPatientName] = useState('');
+  const [patientAge, setPatientAge] = useState('');
+  const [patientGender, setPatientGender] = useState('Male');
+
+  const confirmExport = () => {
+    setShowExportModal(false);
+    exportDiagnosis(messages, cfg.sectionName, {
+      name: patientName,
+      age: patientAge,
+      gender: patientGender,
+      scanImage: image?.base64
+    });
+    setToast({ show: true, message: 'Report generated!' });
+  };
+
+  // Reset page state on tab switch
   useEffect(() => { setImage(null); setMessages([]); setLoading(false); setStreamingText(''); setText(''); setAnalyzing(false); setZoom(1); setContrast(100); sessionIdRef.current = null; }, [sectionKey]);
 
-  const persistMsg = (role, content, meta = {}) => {
+  // Load session history when activeSession is passed
+  useEffect(() => {
+    const load = async () => {
+      if (activeSession && activeSession.section === sectionKey) {
+        sessionIdRef.current = activeSession.id;
+        setMessages([]);
+        setLoading(true);
+        try {
+          const msgs = await apiGetMessages(activeSession.id);
+          const loaded = msgs.map(m => ({
+            role: m.role,
+            text: m.content,
+            image: m.imageUrl || null,
+            timestamp: m.createdAt,
+          }));
+          setMessages(loaded);
+          
+          // Load the image from the first message containing it
+          const firstImgMsg = loaded.find(m => m.role === 'user' && m.image);
+          if (firstImgMsg) {
+            setImage({ base64: firstImgMsg.image, name: 'Loaded Scan' });
+          } else {
+            setImage(null);
+          }
+        } catch (err) {
+          console.warn('Failed to load scan history:', err);
+        } finally {
+          setLoading(false);
+          if (onSessionConsumed) onSessionConsumed();
+        }
+      }
+    };
+    load();
+  }, [activeSession, sectionKey, onSessionConsumed]);
+
+  const persistMsg = (role, content, imageUrl = null, meta = {}) => {
     if (!sessionIdRef.current) return;
-    apiSaveMessage(sessionIdRef.current, role, content, null, meta).catch(() => {});
+    apiSaveMessage(sessionIdRef.current, role, content, imageUrl, meta).catch(() => {});
   };
 
   const scrollDown = useCallback(() => { requestAnimationFrame(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }); }, []);
@@ -92,11 +145,11 @@ export default function ScanAnalysis({ sectionKey, theme }) {
       }
     }
     setMessages(p => [...p, { role: 'user', text: `Analyze this ${cfg.sectionName} image`, image: base64, timestamp: new Date().toISOString() }]);
-    persistMsg('user', `Analyze this ${cfg.sectionName} image`, { type: 'scan_upload' });
+    persistMsg('user', `Analyze this ${cfg.sectionName} image`, base64, { type: 'scan_upload' });
     try {
       const reply = await callAPIStream(cfg.prompt, { base64 }, sectionKey, [], (partial) => { setStreamingText(partial); scrollDown(); });
       setMessages(p => [...p, { role: 'assistant', text: reply, timestamp: new Date().toISOString() }]);
-      persistMsg('assistant', reply, { type: 'scan_analysis' });
+      persistMsg('assistant', reply, null, { type: 'scan_analysis' });
       setStreamingText('');
     } catch (err) {
       setMessages(p => [...p, { role: 'assistant', text: `**Error**: ${err.message}`, timestamp: new Date().toISOString() }]);
@@ -108,11 +161,11 @@ export default function ScanAnalysis({ sectionKey, theme }) {
     if (!text.trim() || loading) return;
     setMessages(p => [...p, { role: 'user', text: text.trim(), timestamp: new Date().toISOString() }]);
     const q = text.trim(); setText(''); setLoading(true); setStreamingText('');
-    persistMsg('user', q);
+    persistMsg('user', q, null);
     try {
       const reply = await callAPIStream(q, image ? { base64: image.base64 } : null, sectionKey, messages, (partial) => { setStreamingText(partial); scrollDown(); });
       setMessages(p => [...p, { role: 'assistant', text: reply, timestamp: new Date().toISOString() }]);
-      persistMsg('assistant', reply);
+      persistMsg('assistant', reply, null);
       setStreamingText('');
     } catch (err) {
       setMessages(p => [...p, { role: 'assistant', text: `**Error**: ${err.message}`, timestamp: new Date().toISOString() }]);
@@ -122,7 +175,13 @@ export default function ScanAnalysis({ sectionKey, theme }) {
 
   const handleDrop = (e) => { e.preventDefault(); const file = e.dataTransfer.files[0]; if (file?.type.startsWith('image/')) handleFile(file); };
   const handleKey = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } };
-  const handleExport = () => { if (!messages.length) return setToast({ show: true, message: 'No data' }); exportDiagnosis(messages, cfg.sectionName); setToast({ show: true, message: 'Report generated!' }); };
+  const handleExport = () => {
+    if (!messages.length) return setToast({ show: true, message: 'No data' });
+    setPatientName('');
+    setPatientAge('');
+    setPatientGender('Male');
+    setShowExportModal(true);
+  };
   const clearChat = () => { setMessages([]); setImage(null); setStreamingText(''); setZoom(1); setContrast(100); sessionIdRef.current = null; };
 
   const ToolBtn = ({ children, onClick, active, title }) => (
@@ -304,6 +363,49 @@ export default function ScanAnalysis({ sectionKey, theme }) {
           </div>
         </div>
       </div>
+      {/* ═══ EXPORT PATIENT DETAILS MODAL ═══ */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className={`w-full max-w-md p-6 rounded-3xl shadow-2xl transition-all duration-300 transform scale-100 ${dark ? 'bg-[#0f172a] border border-white/10 text-white' : 'bg-white border border-slate-200 text-slate-800'}`}>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-base font-bold font-display flex items-center gap-2">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="w-5 h-5 text-[#7ad7c6]"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                Export Diagnostic Report
+              </h3>
+              <button onClick={() => setShowExportModal(false)} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-60">Patient Name</label>
+                <input type="text" value={patientName} onChange={e => setPatientName(e.target.value)} placeholder="e.g. John Doe" className={`w-full px-4 py-2.5 rounded-xl text-sm outline-none transition-all ${dark ? 'bg-white/5 focus:bg-white/10 border border-white/10 text-white focus:border-[#7ad7c6]' : 'bg-slate-50 focus:bg-slate-100 border border-slate-200 focus:border-[#00796b]'}`} />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-60">Age (Years)</label>
+                  <input type="number" value={patientAge} onChange={e => setPatientAge(e.target.value)} placeholder="e.g. 45" className={`w-full px-4 py-2.5 rounded-xl text-sm outline-none transition-all ${dark ? 'bg-white/5 focus:bg-white/10 border border-white/10 text-white focus:border-[#7ad7c6]' : 'bg-slate-50 focus:bg-slate-100 border border-slate-200 focus:border-[#00796b]'}`} />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-60">Gender</label>
+                  <select value={patientGender} onChange={e => setPatientGender(e.target.value)} className={`w-full px-4 py-2.5 rounded-xl text-sm outline-none transition-all ${dark ? 'bg-[#1e293b] border border-white/10 text-white focus:border-[#7ad7c6]' : 'bg-slate-50 border border-slate-200 focus:border-[#00796b]'}`}>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 mt-6">
+              <button onClick={() => setShowExportModal(false)} className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${dark ? 'bg-white/5 hover:bg-white/10' : 'bg-slate-100 hover:bg-slate-200'}`}>Cancel</button>
+              <button onClick={confirmExport} className="flex-1 py-2.5 rounded-xl text-white text-xs font-bold transition-all hover:scale-[1.02]" style={{ background: 'linear-gradient(135deg, #7ad7c6, #006156)' }}>Generate Report</button>
+            </div>
+          </div>
+        </div>
+      )}
       <Toast message={toast.message} show={toast.show} onClose={() => setToast({ show: false, message: '' })} theme={theme} />
     </div>
   );

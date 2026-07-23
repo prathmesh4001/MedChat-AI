@@ -85,7 +85,7 @@ export default function DocumentUpload({ theme, onClose }) {
     if (!user) return;
     const ok = await deleteUserDocument(fileName, user.id);
     if (ok) {
-      setDocuments(d => d.filter(doc => doc.file_name !== fileName));
+      setDocuments(d => d.filter(doc => doc.fileName !== fileName));
     }
   };
 
@@ -204,16 +204,16 @@ export default function DocumentUpload({ theme, onClose }) {
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
                       style={{ background: dark ? 'rgba(122,215,198,0.08)' : 'rgba(0,121,107,0.06)', color: 'var(--primary)' }}>
-                      {fileIcon(doc.file_type)}
+                      {fileIcon(doc.fileType)}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-medium truncate" style={{ color: 'var(--on-surface)' }}>{doc.file_name}</p>
+                      <p className="text-sm font-medium truncate" style={{ color: 'var(--on-surface)' }}>{doc.fileName}</p>
                       <p className="text-[10px]" style={{ color: 'var(--outline)' }}>
-                        {new Date(doc.created_at).toLocaleDateString()} · {doc.metadata?.total_chunks || '?'} {t('chunks')}
+                        {new Date(doc.createdAt).toLocaleDateString()} · {doc.charCount ? `${(doc.charCount / 1024).toFixed(1)} KB` : '0 KB'}
                       </p>
                     </div>
                   </div>
-                  <button onClick={() => handleDelete(doc.file_name)}
+                  <button onClick={() => handleDelete(doc.fileName)}
                     className="w-7 h-7 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:scale-110"
                     style={{ color: '#ef4444' }}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">

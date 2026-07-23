@@ -7,7 +7,7 @@ import Toast from '../components/Toast';
 import DocumentUpload from '../components/DocumentUpload';
 import { callAPIStream } from '../lib/api';
 import { exportDiagnosis } from '../lib/export';
-import { apiCreateSession, apiSaveMessage } from '../lib/api-client';
+import { apiCreateSession, apiSaveMessage, apiGetMessages } from '../lib/api-client';
 import { getUserDocumentsContext, listUserDocuments } from '../lib/rag';
 import { shouldSearchWeb, searchWeb } from '../lib/search';
 import { useAuth } from '../contexts/AuthContext';
@@ -50,7 +50,7 @@ function looksLikeMCQ(text) {
   return (t.startsWith('{') && t.includes('"question"')) || (t.startsWith('```') && t.includes('question')) || (t.startsWith('{') && t.includes('"thinking"'));
 }
 
-export default function ChatPage({ sectionKey, theme }) {
+export default function ChatPage({ sectionKey, theme, activeSession, onSessionConsumed }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [image, setImage] = useState(null);
@@ -67,6 +67,31 @@ export default function ChatPage({ sectionKey, theme }) {
   const sessionIdRef = useRef(null);
   const sec = SECTIONS[sectionKey];
   const isResearch = sectionKey === 'research';
+
+  // Export Modal States
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [patientName, setPatientName] = useState('');
+  const [patientAge, setPatientAge] = useState('');
+  const [patientGender, setPatientGender] = useState('Male');
+
+  const confirmExport = () => {
+    setShowExportModal(false);
+    exportDiagnosis(messages, sectionKey === 'general' ? 'General Medical' : 'Medical Research', {
+      name: patientName,
+      age: patientAge,
+      gender: patientGender,
+      scanImage: null
+    });
+    setToast({ show: true, message: 'Report generated!' });
+  };
+
+  const handleExport = () => {
+    if (!messages.length) return setToast({ show: true, message: 'No data' });
+    setPatientName('');
+    setPatientAge('');
+    setPatientGender('Male');
+    setShowExportModal(true);
+  };
   const anySourceEnabled = researchSources.searchapi || researchSources.who || researchSources.pubmed;
 
   const toggleSource = (key) => {
@@ -77,7 +102,36 @@ export default function ChatPage({ sectionKey, theme }) {
   const { t, langMeta } = useLanguage();
 
   // Reset session when section changes
-  useEffect(() => { sessionIdRef.current = null; }, [sectionKey]);
+  useEffect(() => { sessionIdRef.current = null; setMessages([]); setMcqData(null); setMcqRetryInfo(null); }, [sectionKey]);
+
+  // Load messages when a session is selected from sidebar
+  useEffect(() => {
+    if (!activeSession || activeSession.section !== sectionKey) return;
+    const loadHistory = async () => {
+      try {
+        sessionIdRef.current = activeSession.id;
+        setMessages([]); setMcqData(null); setMcqRetryInfo(null);
+        const msgs = await apiGetMessages(activeSession.id);
+        const loaded = msgs.map(m => ({
+          role: m.role,
+          text: m.content,
+          rawText: m.content,
+          timestamp: m.createdAt,
+          isMcq: false,
+          isMcqAnswer: m.metadata?.isMcqAnswer || false,
+          usedRAG: m.metadata?.usedRAG || false,
+          webSources: [],
+          searchedWith: [],
+        }));
+        setMessages(loaded.filter(m => !m.isMcqAnswer));
+      } catch (err) {
+        console.warn('Failed to load session history:', err.message);
+      } finally {
+        if (onSessionConsumed) onSessionConsumed();
+      }
+    };
+    loadHistory();
+  }, [activeSession, sectionKey, onSessionConsumed]);
 
   // Check if user has uploaded documents
   useEffect(() => {
@@ -224,12 +278,6 @@ export default function ChatPage({ sectionKey, theme }) {
     sessionIdRef.current = null; window.speechSynthesis?.cancel();
   };
 
-  const handleExport = () => {
-    if (!messages.length) { setToast({ show: true, message: t('no_diagnosis') }); return; }
-    const exportableMessages = messages.filter(m => m.text && !m.isMcq);
-    exportDiagnosis(exportableMessages, sec.name);
-    setToast({ show: true, message: t('report_generated') });
-  };
 
   // Only show non-MCQ messages
   const displayMessages = messages.filter(m => !m.isMcq && !m.isMcqAnswer);
@@ -246,20 +294,8 @@ export default function ChatPage({ sectionKey, theme }) {
           <p className="text-[11px] sm:text-xs hidden sm:block" style={{ color: 'var(--outline)' }}>{t({general:'general_desc',research:'research_desc',xray:'xray_desc',mri:'mri_desc',ct:'ct_desc'}[sectionKey])}</p>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-          {/* Research section: Source toggle chips */}
           {isResearch && (
             <div className="flex items-center gap-1 sm:gap-1.5">
-              <button onClick={() => toggleSource('searchapi')}
-                className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all duration-200 flex items-center gap-1 cursor-pointer border"
-                style={{
-                  background: researchSources.searchapi ? (dark ? 'rgba(245,158,11,0.15)' : 'rgba(245,158,11,0.1)') : 'transparent',
-                  color: researchSources.searchapi ? '#fbbf24' : 'var(--outline)',
-                  borderColor: researchSources.searchapi ? 'rgba(245,158,11,0.3)' : 'var(--outline-variant)',
-                  opacity: researchSources.searchapi ? 1 : 0.5,
-                }}>
-                {researchSources.searchapi && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />}
-                {t('source_searchapi')}
-              </button>
               <button onClick={() => toggleSource('who')}
                 className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all duration-200 flex items-center gap-1 cursor-pointer border"
                 style={{
@@ -303,10 +339,10 @@ export default function ChatPage({ sectionKey, theme }) {
           )}
 
           {messages.length > 0 && (
-            <button onClick={handleExport} className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-white text-[11px] sm:text-xs font-bold transition-all duration-300 hover:-translate-y-0.5 flex items-center gap-1.5"
-              style={{ background: 'linear-gradient(135deg, #7ad7c6, #006156)' }}>
+            <button onClick={handleExport} className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold transition-all duration-300 hover:-translate-y-0.5 flex items-center gap-1 sm:gap-1.5"
+              style={{ background: 'linear-gradient(135deg, #7ad7c6, #006156)', color: '#ffffff' }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              <span className="hidden sm:inline">{t('export_diagnosis')}</span>
+              <span>Export</span>
             </button>
           )}
           <button onClick={clearChat} className="px-3 py-1.5 rounded-xl text-xs font-semibold hover:opacity-70" style={{ color: 'var(--outline)' }}>{t('clear')}</button>
@@ -332,7 +368,6 @@ export default function ChatPage({ sectionKey, theme }) {
             {/* Data source badges for research — reflect selected sources */}
             {isResearch && (
               <div className="flex items-center gap-2 mb-5 flex-wrap justify-center">
-                {researchSources.searchapi && <span className="px-3 py-1 rounded-full text-[10px] font-bold" style={{ background: 'rgba(245,158,11,0.1)', color: '#fbbf24' }}>{t('source_searchapi')}</span>}
                 {researchSources.who && <span className="px-3 py-1 rounded-full text-[10px] font-bold" style={{ background: 'rgba(16,185,129,0.1)', color: '#34d399' }}>WHO</span>}
                 {researchSources.pubmed && <span className="px-3 py-1 rounded-full text-[10px] font-bold" style={{ background: 'rgba(139,92,246,0.1)', color: '#a78bfa' }}>PubMed</span>}
                 {!anySourceEnabled && <span className="px-3 py-1 rounded-full text-[10px] font-bold" style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171' }}>{t('no_source_selected')}</span>}
@@ -408,6 +443,50 @@ export default function ChatPage({ sectionKey, theme }) {
         <InputArea theme={theme} section={sectionKey} image={image} setImage={setImage} onSend={sendMessage} loading={loading} />
       )}
       <Toast message={toast.message} show={toast.show} onClose={() => setToast({ show: false, message: '' })} theme={theme} />
+
+      {/* ═══ EXPORT PATIENT DETAILS MODAL ═══ */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className={`w-full max-w-md p-6 rounded-3xl shadow-2xl transition-all duration-300 transform scale-100 ${dark ? 'bg-[#0f172a] border border-white/10 text-white' : 'bg-white border border-slate-200 text-slate-800'}`}>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-base font-bold font-display flex items-center gap-2">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="w-5 h-5 text-[#7ad7c6]"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                Export Diagnostic Report
+              </h3>
+              <button onClick={() => setShowExportModal(false)} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-60">Patient Name</label>
+                <input type="text" value={patientName} onChange={e => setPatientName(e.target.value)} placeholder="e.g. John Doe" className={`w-full px-4 py-2.5 rounded-xl text-sm outline-none transition-all ${dark ? 'bg-white/5 focus:bg-white/10 border border-white/10 text-white focus:border-[#7ad7c6]' : 'bg-slate-50 focus:bg-slate-100 border border-slate-200 focus:border-[#00796b]'}`} />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-60">Age (Years)</label>
+                  <input type="number" value={patientAge} onChange={e => setPatientAge(e.target.value)} placeholder="e.g. 45" className={`w-full px-4 py-2.5 rounded-xl text-sm outline-none transition-all ${dark ? 'bg-white/5 focus:bg-white/10 border border-white/10 text-white focus:border-[#7ad7c6]' : 'bg-slate-50 focus:bg-slate-100 border border-slate-200 focus:border-[#00796b]'}`} />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider mb-1.5 opacity-60">Gender</label>
+                  <select value={patientGender} onChange={e => setPatientGender(e.target.value)} className={`w-full px-4 py-2.5 rounded-xl text-sm outline-none transition-all ${dark ? 'bg-[#1e293b] border border-white/10 text-white focus:border-[#7ad7c6]' : 'bg-slate-50 border border-slate-200 focus:border-[#00796b]'}`}>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 mt-6">
+              <button onClick={() => setShowExportModal(false)} className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${dark ? 'bg-white/5 hover:bg-white/10' : 'bg-slate-100 hover:bg-slate-200'}`}>Cancel</button>
+              <button onClick={confirmExport} className="flex-1 py-2.5 rounded-xl text-white text-xs font-bold transition-all hover:scale-[1.02]" style={{ background: 'linear-gradient(135deg, #7ad7c6, #006156)' }}>Generate Report</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Document Upload Modal */}
       {showDocUpload && (

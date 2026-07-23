@@ -3,7 +3,7 @@
  * Extracts the diagnostic report from AI responses and formats it
  * as a clean clinical document — no chat logs.
  */
-export function exportDiagnosis(messages, sectionName = 'General Medical') {
+export function exportDiagnosis(messages, sectionName = 'General Medical', patientData = null) {
   if (!messages.length) return;
 
   const now = new Date();
@@ -31,6 +31,10 @@ export function exportDiagnosis(messages, sectionName = 'General Medical') {
 
   // Convert markdown to clean HTML
   const reportHtml = convertReportToHTML(reportMsg.text);
+
+  const patientNameVal = patientData?.name || 'Anonymous';
+  const patientAgeVal = patientData?.age ? `${patientData.age} Yrs` : 'N/A';
+  const patientGenderVal = patientData?.gender || 'N/A';
 
   const html = `<!DOCTYPE html><html lang="en"><head>
     <meta charset="UTF-8">
@@ -121,16 +125,16 @@ export function exportDiagnosis(messages, sectionName = 'General Medical') {
       <!-- Info Grid -->
       <div class="info-grid">
         <div class="info-card">
+          <div class="label">Patient Name</div>
+          <div class="value">${escapeHtml(patientNameVal)}</div>
+        </div>
+        <div class="info-card">
+          <div class="label">Age / Gender</div>
+          <div class="value">${escapeHtml(patientAgeVal)} / ${escapeHtml(patientGenderVal)}</div>
+        </div>
+        <div class="info-card">
           <div class="label">Department</div>
           <div class="value">${sectionName}</div>
-        </div>
-        <div class="info-card">
-          <div class="label">Assessment Date</div>
-          <div class="value">${dateStr}</div>
-        </div>
-        <div class="info-card">
-          <div class="label">Report Status</div>
-          <div class="value">AI-Generated</div>
         </div>
       </div>
 
@@ -141,6 +145,16 @@ export function exportDiagnosis(messages, sectionName = 'General Medical') {
           ${patientSymptoms.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
         </ul>
       </div>
+
+      <!-- Attached Scan Image (if available) -->
+      ${patientData?.scanImage ? `
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 32px; text-align: center;">
+        <h3 style="font-family: 'Manrope', sans-serif; font-size: 14px; font-weight: 700; color: #334155; margin-bottom: 12px; text-align: left; display: flex; align-items: center; gap: 8px;">
+          📸 Attached Diagnostic Scan
+        </h3>
+        <img src="${patientData.scanImage}" style="max-height: 280px; max-width: 100%; object-fit: contain; border-radius: 8px; border: 1px solid #cbd5e1; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);" />
+      </div>
+      ` : ''}
 
       <!-- Differential Diagnosis Chart -->
       ${buildDiffDxChart(reportMsg.text)}

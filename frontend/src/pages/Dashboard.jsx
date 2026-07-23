@@ -5,7 +5,6 @@ import InputArea from '../components/InputArea';
 import Message from '../components/Message';
 import Toast from '../components/Toast';
 import { callAPIStream } from '../lib/api';
-import { exportDiagnosis } from '../lib/export';
 import { shouldSearchWeb, searchWeb } from '../lib/search';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -61,11 +60,6 @@ export default function Dashboard({ theme }) {
     } finally { setLoading(false); }
   };
 
-  const handleExport = () => {
-    if (!messages.length) { setToast({ show: true, message: t('no_diagnosis') }); return; }
-    exportDiagnosis(messages, 'General Consultation');
-    setToast({ show: true, message: t('report_generated') });
-  };
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -131,16 +125,7 @@ export default function Dashboard({ theme }) {
           </div>
         ) : (
           <div className="p-4 md:p-6 flex flex-col gap-5">
-            {/* Export bar */}
-            <div className="flex items-center justify-between px-4 py-3 rounded-2xl" style={{ background: dark ? 'rgba(122,215,198,0.04)' : 'rgba(0,121,107,0.04)' }}>
-              <span className="text-xs font-semibold" style={{ color: 'var(--primary)' }}>{t('consultation_active')} — {messages.length} {t('messages')}</span>
-              <button onClick={handleExport} className="px-4 py-2 rounded-xl text-white text-xs font-bold transition-all duration-300 hover:-translate-y-0.5 flex items-center gap-1.5"
-                style={{ background: 'linear-gradient(135deg, #7ad7c6, #006156)' }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                {t('export_diagnosis')}
-              </button>
-            </div>
-            {messages.map((msg, i) => <Message key={i} msg={msg} theme={theme} onCopy={() => setToast({ show: true, message: t('copied') })} />)}
+              {messages.map((msg, i) => <Message key={i} msg={msg} theme={theme} onCopy={() => setToast({ show: true, message: t('copied') })} />)}
             {loading && streamingText && <Message msg={{ role: 'assistant', text: streamingText }} theme={theme} onCopy={() => {}} />}
             {loading && !streamingText && (
               <div className="flex gap-3 max-w-[800px] w-full mx-auto">
