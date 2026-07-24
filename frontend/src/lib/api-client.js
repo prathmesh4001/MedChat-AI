@@ -247,31 +247,64 @@ async function apiFetch(path, options = {}) {
     return handleLocalFallback(path, options);
   }
 
+  // Routes that should fall back to local storage on failure
+  const isAuthRoute = path.startsWith('/api/auth');
+  const isSessionRoute = path.startsWith('/api/sessions');
+  const isMessageRoute = path.startsWith('/api/messages');
+  const isDocumentRoute = path.startsWith('/api/documents');
+  const canFallback = isAuthRoute || isSessionRoute || isMessageRoute;
+
   try {
     const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
     if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const errMsg = data.error || `HTTP ${res.status}`;
+
       if (res.status === 401) {
-        // For /api/auth/me: token is invalid/expired — clear it and fall back to local
         if (path === '/api/auth/me') {
           clearToken();
           return handleLocalFallback(path, options);
         }
-        // For document/session/message routes with bad token — fall back silently
+        if (canFallback) return handleLocalFallback(path, options);
+        throw new Error(errMsg);
+      }
+
+      // For auth errors, surface them
+      if (isAuthRoute) {
+        throw new Error(errMsg);
+      }
+
+      // For session/message routes, fall back to local
+      if (canFallback) {
+        console.warn(`[apiFetch] ${path} returned ${res.status}, using local fallback`);
         return handleLocalFallback(path, options);
       }
-      if (res.status === 405 || res.status === 404 || res.status >= 500) {
-        return handleLocalFallback(path, options);
+
+      // For document routes, throw the real error so UI can show it
+      if (isDocumentRoute) {
+        throw new Error(errMsg);
       }
-      const data = await res.json().catch(() => ({}));
-      if (data.error && data.error !== 'Method Not Allowed') {
-        throw new Error(data.error);
-      }
+
       return handleLocalFallback(path, options);
     }
     return await res.json().catch(() => ({}));
   } catch (err) {
-    if (err.message === 'Invalid email or password' || err.message === 'An account with this email already exists') {
+    // Always surface auth errors
+    if (
+      err.message === 'Invalid email or password' ||
+      err.message === 'An account with this email already exists' ||
+      err.message === 'No account found with this email address'
+    ) {
       throw err;
+    }
+    // Network failure — fall back for session/message routes, throw for doc routes
+    if (isDocumentRoute) {
+      console.warn(`[apiFetch] document route network error:`, err.message);
+      throw new Error('Upload failed — backend unreachable. Please try again.');
+    }
+    if (canFallback) {
+      console.warn(`[apiFetch] ${path} network error, using local fallback:`, err.message);
+      return handleLocalFallback(path, options);
     }
     return handleLocalFallback(path, options);
   }
@@ -358,7 +391,9 @@ export async function apiUploadDocument(fileName, fileType, fullText) {
 }
 
 export async function apiListDocuments() {
-  return apiFetch('/api/documents');
+  const result = await apiFetch('/api/documents');
+  // Backend returns an array; local fallback also returns array
+  return Array.isArray(result) ? result : [];
 }
 
 export async function apiGetDocumentsContext() {
