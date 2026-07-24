@@ -404,39 +404,10 @@ JWT_EXPIRES_IN = 7d
 CLIENT_URL   = https://your-frontend.vercel.app
 ```
 
-#### Redeploy after adding env vars
-In both Vercel and Render: go to **Deployments** → select latest → **Redeploy**.
 
----
 
-## 🗺 Roadmap
 
-- [ ] 🩺 **Role-Based Dashboards** — Distinct Doctor & Patient views with shared patient history and clinical notes
-- [ ] 🩻 **Interactive DICOM Annotations** — Bounding-box overlays and pin markers on radiological scan canvases
-- [ ] 🧬 **Specialized Medical Models** — BioMistral or Med-PaLM 2 integration for cardiology & oncology sub-specialties
-- [ ] 🧪 **Automated Test Suite** — End-to-end tests with Jest, React Testing Library, and Supertest
-- [ ] 📱 **PWA & Mobile App** — Progressive Web App support + React Native cross-platform app
-- [ ] 🔔 **Push Notifications** — Appointment reminders and health check-in alerts
-- [ ] 🏥 **Telemedicine Video** — Secure WebRTC video consultation with a doctor
 
----
 
-## 👨‍💻 Author
 
-**Prathmesh** — [@prathmesh4001](https://github.com/prathmesh4001)
-
----
-
-## 📄 License
-
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
-
----
-
-<div align="center">
-
-**Built with ❤️ using React, Node.js, MongoDB & Google Gemini AI**
-
-[🌐 Live Demo](https://med-chat-ai-neon.vercel.app) · [🐛 Report Bug](https://github.com/prathmesh4001/MedChat-AI/issues) · [✨ Request Feature](https://github.com/prathmesh4001/MedChat-AI/issues)
-
-</div>
+[🌐 Live Demo](https://med-chat-ai-neon.vercel.app)
