@@ -1,4 +1,3 @@
-<div align="center">
 
 # 🏥 MedChat AI
 
@@ -9,11 +8,6 @@
 [![Live Demo](https://img.shields.io/badge/🌐_Live_Demo-med--chat--ai--neon.vercel.app-00bcd4?style=for-the-badge)](https://med-chat-ai-neon.vercel.app)
 [![GitHub](https://img.shields.io/badge/GitHub-prathmesh4001%2FMedChat--AI-181717?style=for-the-badge&logo=github)](https://github.com/prathmesh4001/MedChat-AI)
 
-</div>
-
----
-
-<div align="center">
 
 [![React](https://img.shields.io/badge/React-19.1.0-61DAFB?style=flat-square&logo=react)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Vite-6.4.1-646CFF?style=flat-square&logo=vite)](https://vitejs.dev/)
@@ -25,25 +19,7 @@
 [![Recharts](https://img.shields.io/badge/Recharts-Analytics-FF6384?style=flat-square)](https://recharts.org/)
 [![JWT](https://img.shields.io/badge/Auth-JWT_+_Bcrypt-000000?style=flat-square&logo=jsonwebtokens)](https://jwt.io/)
 
-</div>
 
----
-
-## 📋 Table of Contents
-
-- [Overview](#-overview)
-- [Live Demo](#-live-demo)
-- [Key Features](#-key-features)
-- [System Architecture](#️-system-architecture)
-- [Tech Stack](#-tech-stack)
-- [Repository Structure](#-repository-structure)
-- [Quick Start](#-quick-start--installation)
-- [Environment Variables](#️-environment-variables)
-- [REST API Reference](#-rest-api-endpoints)
-- [Deployment](#-deployment-vercel--render)
-- [Roadmap](#-roadmap)
-
----
 
 ## 🌟 Overview
 
@@ -58,7 +34,7 @@
 
 > ⚠️ *MedChat AI is intended for informational and educational purposes only. Always consult a qualified healthcare professional for medical advice.*
 
----
+
 
 ## 🌐 Live Demo
 
