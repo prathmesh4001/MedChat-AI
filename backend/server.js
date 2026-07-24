@@ -4,15 +4,30 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+
+// ─── Cached MongoDB connection for Vercel serverless ─────
+let isConnected = false;
+async function connectDB() {
+  if (isConnected && mongoose.connection.readyState === 1) return;
+  try {
+    await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+    });
+    isConnected = true;
+    console.log('✅ MongoDB connected');
+  } catch (err) {
+    isConnected = false;
+    console.error('❌ MongoDB connection failed:', err.message);
+    // Do NOT process.exit — Vercel serverless must stay alive
+  }
+}
 
 // ─── Middleware ───────────────────────────────────────────
-// Build dynamic allowed origins list
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
   'http://localhost:5175',
-  'https://med-chat-ai-neon.vercel.app',   // Vercel production
 ];
 // Support comma-separated CLIENT_URL env var for extra origins
 if (process.env.CLIENT_URL) {
@@ -36,6 +51,12 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// ─── DB connect middleware (runs before every request) ────
+app.use(async (req, res, next) => {
+  await connectDB();
+  next();
+});
 
 app.get('/', (req, res) => {
   res.status(200).json({
@@ -75,15 +96,15 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: err.message || 'Internal server error' });
 });
 
-// ─── Connect to MongoDB + Start Server ───────────────────
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log('✅ MongoDB connected:', process.env.MONGO_URI);
+// ─── Start Server (local dev only) ───────────────────────
+// On Vercel, module.exports = app is used as serverless handler
+if (process.env.VERCEL !== '1') {
+  const PORT = process.env.PORT || 5000;
+  connectDB().then(() => {
     app.listen(PORT, () => {
       console.log(`🚀 MedChat Backend running at http://localhost:${PORT}`);
     });
-  })
-  .catch((err) => {
-    console.error('❌ MongoDB connection failed:', err.message);
-    process.exit(1);
   });
+}
+
+module.exports = app;
