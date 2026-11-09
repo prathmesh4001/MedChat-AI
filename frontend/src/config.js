@@ -1,4 +1,4 @@
-export const API_KEY = import.meta.env.VITE_API_KEY || '';
+export const API_KEY = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_KEY) || '';
 export const API_URL = 'https://router.huggingface.co/v1/chat/completions';
 export const MODEL = 'Qwen/Qwen2.5-72B-Instruct';
 
