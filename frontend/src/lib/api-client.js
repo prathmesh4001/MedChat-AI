@@ -68,6 +68,13 @@ function saveLocalMessages(msgs) {
   localStorage.setItem('medchat-messages-db', JSON.stringify(msgs));
 }
 
+function getLocalDocuments() {
+  try { return JSON.parse(localStorage.getItem('medchat-documents-db') || '[]'); } catch { return []; }
+}
+function saveLocalDocuments(docs) {
+  localStorage.setItem('medchat-documents-db', JSON.stringify(docs));
+}
+
 // ─── Local Fallback for Offline / Preview Modes ────────────
 function handleLocalFallback(path, options) {
   const body = options.body ? JSON.parse(options.body) : {};
@@ -223,9 +230,51 @@ function handleLocalFallback(path, options) {
     return msgs.filter(m => m.sessionId === sessId);
   }
 
-  if (path.startsWith('/api/documents')) {
-    if (path === '/api/documents/context') return { context: '' };
-    return [];
+  if (path === '/api/documents' && options.method === 'POST') {
+    const docs = getLocalDocuments();
+    const newDoc = {
+      id: 'doc_' + Date.now(),
+      fileName: body.fileName,
+      fileType: body.fileType,
+      fullText: body.fullText,
+      charCount: body.charCount || (body.fullText || '').length,
+      createdAt: new Date().toISOString(),
+    };
+    const existingIdx = docs.findIndex(d => d.fileName === body.fileName);
+    if (existingIdx !== -1) {
+      docs[existingIdx] = newDoc;
+    } else {
+      docs.unshift(newDoc);
+    }
+    saveLocalDocuments(docs);
+    return newDoc;
+  }
+
+  if (path === '/api/documents' && (!options.method || options.method === 'GET')) {
+    const docs = getLocalDocuments();
+    return docs.map(d => ({
+      id: d.id,
+      fileName: d.fileName,
+      fileType: d.fileType,
+      charCount: d.charCount,
+      createdAt: d.createdAt,
+    }));
+  }
+
+  if (path === '/api/documents/context') {
+    const docs = getLocalDocuments();
+    if (!docs || docs.length === 0) return { context: '' };
+    const context = docs
+      .map((doc, i) => `━━━ Document ${i + 1}: "${doc.fileName}" (${doc.fileType}) ━━━\n${doc.fullText}`)
+      .join('\n\n');
+    return { context };
+  }
+
+  if (path.startsWith('/api/documents/') && options.method === 'DELETE') {
+    const fileName = decodeURIComponent(path.split('/api/documents/')[1]);
+    const docs = getLocalDocuments().filter(d => d.fileName !== fileName);
+    saveLocalDocuments(docs);
+    return { success: true };
   }
 
   return {};

@@ -15,13 +15,13 @@ export default function DocumentUpload({ theme, onClose }) {
   const fileRef = useRef(null);
 
   useEffect(() => {
-    if (user) loadDocuments();
+    loadDocuments();
   }, [user]);
 
   const loadDocuments = async () => {
     const userId = user?.id || 'demo-user';
     const docs = await listUserDocuments(userId);
-    setDocuments(docs);
+    setDocuments(docs || []);
   };
 
   const handleUpload = async (files) => {
@@ -42,7 +42,11 @@ export default function DocumentUpload({ theme, onClose }) {
         }
 
         const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'text/plain'];
-        if (!validTypes.includes(file.type) && !file.name.endsWith('.txt')) {
+        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+        const isImage = file.type?.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(file.name);
+        const isText = file.type === 'text/plain' || file.name.toLowerCase().endsWith('.txt');
+
+        if (!isPdf && !isImage && !isText && !validTypes.includes(file.type)) {
           setError(t('unsupported_format', { name: file.name }));
           continue;
         }
@@ -51,12 +55,12 @@ export default function DocumentUpload({ theme, onClose }) {
         await new Promise(r => setTimeout(r, 100)); // Let UI update
 
         // Show specific progress for images (Vision AI takes longer)
-        if (file.type.startsWith('image/')) {
+        if (isImage) {
           setUploadProgress(`Reading handwriting with AI — ${file.name}...`);
         } else {
           setUploadProgress(`${t('generating_embeddings')} ${file.name}...`);
         }
-        const result = await uploadAndIndexDocument(file, user.id);
+        const result = await uploadAndIndexDocument(file, userId);
 
         setUploadProgress(`Done — ${result.textLength} characters extracted from ${file.name}`);
       } catch (err) {
@@ -83,8 +87,8 @@ export default function DocumentUpload({ theme, onClose }) {
   };
 
   const handleDelete = async (fileName) => {
-    if (!user) return;
-    const ok = await deleteUserDocument(fileName, user.id);
+    const userId = user?.id || 'demo-user';
+    const ok = await deleteUserDocument(fileName, userId);
     if (ok) {
       setDocuments(d => d.filter(doc => doc.fileName !== fileName));
     }

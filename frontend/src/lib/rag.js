@@ -85,9 +85,9 @@ export async function extractTextFromImage(file) {
 export async function uploadAndIndexDocument(file, userId = 'demo-user') {
   let extractedText = '';
 
-  if (file.type === 'application/pdf') {
+  if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
     extractedText = await extractTextFromPDF(file);
-  } else if (file.type.startsWith('image/') || file.name.match(/\.(png|jpe?g|webp|dcm|dicom)$/i)) {
+  } else if (file.type?.startsWith('image/') || file.name.match(/\.(png|jpe?g|webp|dcm|dicom)$/i)) {
     extractedText = await extractTextFromImage(file);
   } else {
     extractedText = await new Promise((resolve, reject) => {
